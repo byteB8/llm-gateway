@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -80,9 +81,16 @@ func TestRPMLimitReturns429WithRetryAfter(t *testing.T) {
 }
 
 func TestUnusedTokensAreRefunded(t *testing.T) {
-	// Each request reserves 2 prompt + 80 default max tokens = 82 of 100, but uses 2 + 4 = 6.
+	// Each request reserves 2 prompt + 80 default max tokens = 82 of 100. The model stops early, after
+	// 4 tokens (the fake backend always writes its full cap, so this backend reports the usage itself).
 	// Without the refund the second request would find only 18 tokens left.
-	gw := limitedGateway(t, limit.Limits{TPM: 100}, nil)
+	stopsEarly := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"done\"}}]}\n\n" +
+			"data: {\"choices\":[],\"usage\":{\"prompt_tokens\":2,\"completion_tokens\":4,\"total_tokens\":6}}\n\n" +
+			"data: [DONE]\n\n"))
+	})
+	gw := limitedGateway(t, limit.Limits{TPM: 100}, stopsEarly)
 	if resp := call(t, gw.URL, "sk-a"); resp.Header.Get("X-RateLimit-Remaining-Tokens") != "18" {
 		t.Fatalf("remaining after reservation: %q", resp.Header.Get("X-RateLimit-Remaining-Tokens"))
 	}
@@ -202,5 +210,37 @@ func TestIdempotencyKeyIsRecordedNotBilledOn(t *testing.T) {
 	}
 	if ids[0] == ids[1] {
 		t.Fatal("two requests with the same Idempotency-Key share one billing id: the second would not be billed")
+	}
+}
+
+func TestDefaultMaxTokensIsForwarded(t *testing.T) {
+	var seen []json.RawMessage
+	var mu sync.Mutex
+	backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var m map[string]json.RawMessage
+		json.NewDecoder(r.Body).Decode(&m)
+		mu.Lock()
+		seen = append(seen, m["max_tokens"])
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"choices":[],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`))
+	})
+	gw := limitedGateway(t, limit.Limits{}, backend) // DefaultMaxTokens 80
+	for _, body := range []string{
+		`{"messages":[{"role":"user","content":"x"}]}`,                           // no cap: the gateway adds its reservation
+		`{"messages":[{"role":"user","content":"x"}],"max_tokens":4}`,            // the client's cap is kept
+		`{"messages":[{"role":"user","content":"x"}],"max_completion_tokens":7}`, // the newer field counts as a cap
+	} {
+		req, _ := http.NewRequest(http.MethodPost, gw.URL+"/v1/chat/completions", strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer sk-a")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}
+	if len(seen) != 3 || string(seen[0]) != "80" || string(seen[1]) != "4" || seen[2] != nil {
+		t.Fatalf("backend saw max_tokens %q", seen)
 	}
 }

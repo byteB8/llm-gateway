@@ -214,7 +214,16 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	maxTokens := req.MaxTokens
 	if maxTokens <= 0 {
+		maxTokens = req.MaxCompletionTokens
+	}
+	if maxTokens <= 0 {
+		// The limiter reserves this many output tokens, so the backend must not write more: send the cap.
 		maxTokens = s.cfg.DefaultMaxTokens
+		if body, err = withMaxTokens(body, maxTokens); err != nil {
+			s.count(tenant, "none", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "malformed request body")
+			return
+		}
 	}
 	reqSpan := trace.SpanFromContext(r.Context())
 	reqSpan.SetAttributes(attribute.String("llmgw.tenant", tenant), attribute.String("gen_ai.request.model", req.Model),
@@ -405,6 +414,16 @@ func validKey(k string) bool {
 		}
 	}
 	return true
+}
+
+// withMaxTokens sets max_tokens, keeping every other field of the request as the client sent it.
+func withMaxTokens(body []byte, n int) ([]byte, error) {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(body, &m); err != nil {
+		return nil, err
+	}
+	m["max_tokens"] = json.RawMessage(strconv.Itoa(n))
+	return json.Marshal(m)
 }
 
 // withStreamUsage sets stream_options.include_usage, keeping every other field of the request

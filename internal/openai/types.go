@@ -13,7 +13,9 @@ type ChatRequest struct {
 	Messages  []Message `json:"messages"`
 	Stream    bool      `json:"stream"`
 	MaxTokens int       `json:"max_tokens,omitempty"`
-	User      string    `json:"user,omitempty"`
+	// MaxCompletionTokens is OpenAI's newer name for the same cap.
+	MaxCompletionTokens int    `json:"max_completion_tokens,omitempty"`
+	User                string `json:"user,omitempty"`
 }
 
 type Delta struct {
