@@ -172,3 +172,19 @@ func TestDrainingClosesConnections(t *testing.T) {
 		t.Fatalf("draining response: status %d, Close=%v", resp.StatusCode, resp.Close)
 	}
 }
+
+func TestStreamRequestsAskForUsage(t *testing.T) {
+	out, err := withStreamUsage([]byte(`{"model":"m","stream":true,"stream_options":{"continuous_usage_stats":false},"temperature":0.2,"messages":[]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	json.Unmarshal(out, &got)
+	opts, _ := got["stream_options"].(map[string]any)
+	if opts["include_usage"] != true || opts["continuous_usage_stats"] != false || got["temperature"] != 0.2 || got["model"] != "m" {
+		t.Fatalf("rewritten body %s", out)
+	}
+	if _, err := withStreamUsage([]byte(`{"stream_options": 5}`)); err == nil {
+		t.Fatal("malformed stream_options should fail")
+	}
+}

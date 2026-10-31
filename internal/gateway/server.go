@@ -160,6 +160,15 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.Stream {
+		// OpenAI-style servers (vLLM included) report usage in a stream only when asked; the
+		// limiter's refund and the billing events need it.
+		if body, err = withStreamUsage(body); err != nil {
+			writeError(w, http.StatusBadRequest, "malformed request body")
+			ticket.Done(0)
+			return
+		}
+	}
 	order := s.policy.Order(openai.PrefixKey(req.Messages))[:s.cfg.MaxAttempts]
 	var lastErr string
 	for attempt, b := range order {
@@ -279,4 +288,26 @@ func validKey(k string) bool {
 		}
 	}
 	return true
+}
+
+// withStreamUsage sets stream_options.include_usage, keeping every other field of the request
+// as the client sent it.
+func withStreamUsage(body []byte) ([]byte, error) {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(body, &m); err != nil {
+		return nil, err
+	}
+	opts := map[string]json.RawMessage{}
+	if raw, ok := m["stream_options"]; ok {
+		if err := json.Unmarshal(raw, &opts); err != nil {
+			return nil, err
+		}
+	}
+	opts["include_usage"] = json.RawMessage("true")
+	b, err := json.Marshal(opts)
+	if err != nil {
+		return nil, err
+	}
+	m["stream_options"] = b
+	return json.Marshal(m)
 }
