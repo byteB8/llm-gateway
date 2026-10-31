@@ -24,6 +24,9 @@ prometheus:
 
 grafana:
   adminPassword: admin  # local laptop cluster only
+  # Read-only without logging in, so scripts can screenshot dashboards (the port is bound to 127.0.0.1).
+  grafana.ini:
+    auth.anonymous: {enabled: true, org_role: Viewer}
   service: {type: NodePort, nodePort: 30300}
   sidecar:
     dashboards: {enabled: true, label: grafana_dashboard, labelValue: "1", searchNamespace: ALL}
