@@ -124,7 +124,12 @@ func TestMetricsBackendDyingMidStream(t *testing.T) {
 		conn.Close()
 	})
 	gw, m, _ := metered(t, Config{}, dying)
-	drain(chat(t, gw.URL, true))
+	resp := chat(t, gw.URL, true)
+	_, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err == nil { // a clean end would pass the truncated answer off as complete
+		t.Fatal("client read the cut stream without an error")
+	}
 	if v := testutil.ToFloat64(m.Interrupted.WithLabelValues("a", "backend")); v != 1 {
 		t.Fatalf("interrupted{backend} = %v", v)
 	}

@@ -270,6 +270,13 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		s.log.Info("request", "tenant", tenant, "backend", b.Name, "attempts", attempt+1, "status", resp.StatusCode,
 			"stream", req.Stream, "ttfb_ms", ms(ttfb), "dur_ms", ms(time.Since(start)), "bytes", n,
 			"prompt_tokens", prompt, "completion_tokens", completion, "client_gone", copyErr != nil)
+		var se *streamError
+		if errors.As(copyErr, &se) && se.side == "backend" {
+			// The client already has a 200 and part of the answer. Ending the response normally would
+			// make it look complete, so abort the connection, as httputil.ReverseProxy does: the client
+			// gets a read error instead of a silently truncated answer.
+			panic(http.ErrAbortHandler)
+		}
 		return
 	}
 	ticket.Done(0)
