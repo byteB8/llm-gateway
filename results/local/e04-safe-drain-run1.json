@@ -1,0 +1,44 @@
+{
+  "config": {
+    "url": "http://gateway:8080",
+    "concurrency": 32,
+    "requests": 3000,
+    "prefixes": 16,
+    "prefix_tokens": 1000,
+    "suffix_tokens": 50,
+    "max_tokens": 64,
+    "zipf": 0,
+    "seed": 1,
+    "model": "fake"
+  },
+  "requests": 3000,
+  "errors": 0,
+  "wall_sec": 207.647294974,
+  "req_per_sec": 14.447575637215197,
+  "tokens_per_sec": 924.6448407817726,
+  "ttft_ms": {
+    "p50": 211.947,
+    "p90": 807.999,
+    "p99": 1471.991,
+    "mean": 321.5167086666668
+  },
+  "total_ms": {
+    "p50": 2131.447,
+    "p90": 2727.845,
+    "p99": 3392.067,
+    "mean": 2202.767226666663
+  },
+  "cache_hit_rate": 0.6306666666666667,
+  "retries": 0,
+  "prompt_tokens": 3150000,
+  "completion_tokens": 192000,
+  "status_codes": {
+    "200": 3000
+  },
+  "per_backend": {
+    "fakellm-0": 790,
+    "fakellm-1": 782,
+    "fakellm-2": 798,
+    "fakellm-3": 630
+  }
+}
