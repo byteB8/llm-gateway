@@ -33,6 +33,8 @@ func main() {
 	partitions := flag.Int("usage-partitions", 4, "partitions if the topic has to be created")
 	buffered := flag.Int("usage-buffer", 10000, "usage events held in memory before new ones are dropped")
 	drain := flag.Duration("drain", 30*time.Second, "on SIGTERM, wait this long for open streams to finish")
+	admin := flag.String("admin-listen", ":8081", "admin address for GET /drain (the Kubernetes preStop hook); keep it off the Service")
+	notice := flag.Duration("drain-notice", 5*time.Second, "how long GET /drain keeps serving with Connection: close before returning")
 	flag.Parse()
 
 	backends, err := router.ParseBackends(*spec)
@@ -95,11 +97,27 @@ func main() {
 		}
 	}()
 
-	// Kubernetes sends SIGTERM before stopping a pod: stop accepting, let open streams finish,
+	// The preStop hook calls GET /drain on the admin port: from then on every response says
+	// "Connection: close", and the hook returns after drain-notice, when clients have moved on.
+	adminMux := http.NewServeMux()
+	adminMux.HandleFunc("GET /drain", func(w http.ResponseWriter, _ *http.Request) {
+		logger.Info("drain notice", "for", notice.String())
+		g.StartDraining()
+		time.Sleep(*notice)
+		w.Write([]byte("draining\n"))
+	})
+	go func() {
+		if err := http.ListenAndServe(*admin, adminMux); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	// Kubernetes sends SIGTERM after the preStop hook: stop accepting, let open streams finish,
 	// then flush the usage events still in memory.
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, os.Interrupt)
 	<-stop
+	g.StartDraining() // in case SIGTERM came without the preStop hook
 	logger.Info("draining", "timeout", drain.String())
 	ctx, cancel := context.WithTimeout(context.Background(), *drain)
 	defer cancel()
