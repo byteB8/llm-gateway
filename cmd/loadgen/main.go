@@ -25,15 +25,29 @@ func main() {
 	flag.Int64Var(&c.Seed, "seed", 1, "random seed")
 	flag.StringVar(&c.Model, "model", "fake", "model name sent in the request")
 	out := flag.String("o", "", "also write the summary to this file")
+	raw := flag.String("raw", "", "write one JSON line per request to this file")
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	s := loadgen.Run(ctx, c)
+	s, results := loadgen.Run(ctx, c)
 	b, _ := json.MarshalIndent(s, "", "  ")
 	os.Stdout.Write(append(b, '\n'))
 	if *out != "" {
 		if err := os.WriteFile(*out, append(b, '\n'), 0o644); err != nil {
+			log.Fatal(err)
+		}
+	}
+	if *raw != "" {
+		f, err := os.Create(*raw)
+		if err != nil {
+			log.Fatal(err)
+		}
+		enc := json.NewEncoder(f)
+		for _, r := range results {
+			enc.Encode(r)
+		}
+		if err := f.Close(); err != nil {
 			log.Fatal(err)
 		}
 	}

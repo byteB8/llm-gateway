@@ -16,9 +16,9 @@ func TestRunAgainstFakeBackend(t *testing.T) {
 	srv := httptest.NewServer(fakellm.New(c).Handler())
 	defer srv.Close()
 
-	s := Run(context.Background(), Config{URL: srv.URL, Concurrency: 4, Requests: 20, Prefixes: 2,
+	s, rs := Run(context.Background(), Config{URL: srv.URL, Concurrency: 4, Requests: 20, Prefixes: 2,
 		PrefixTokens: 10, SuffixTokens: 5, MaxTokens: 3, Seed: 1})
-	if s.Errors != 0 || s.Requests != 20 || s.PerBackend["f"] != 20 {
+	if s.Errors != 0 || s.Requests != 20 || s.PerBackend["f"] != 20 || len(rs) != 20 {
 		t.Fatalf("summary %+v", s)
 	}
 	if s.TTFTms.P50 <= 0 || s.TotalMs.P99 < s.TTFTms.P99 {

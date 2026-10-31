@@ -33,12 +33,13 @@ type Config struct {
 }
 
 type Result struct {
-	TTFT     time.Duration
-	Total    time.Duration
-	Tokens   int
-	Backend  string
-	CacheHit bool
-	Err      string
+	Prefix   int           `json:"prefix"`
+	TTFT     time.Duration `json:"ttft_ns"`
+	Total    time.Duration `json:"total_ns"`
+	Tokens   int           `json:"tokens"`
+	Backend  string        `json:"backend"`
+	CacheHit bool          `json:"cache_hit"`
+	Err      string        `json:"err,omitempty"`
 }
 
 type Summary struct {
@@ -62,8 +63,9 @@ type Percentiles struct {
 	Mean float64 `json:"mean"`
 }
 
-// Run sends cfg.Requests requests from cfg.Concurrency workers and summarises them.
-func Run(ctx context.Context, cfg Config) Summary {
+// Run sends cfg.Requests requests from cfg.Concurrency workers and summarises them. It also
+// returns every request's result, in the order the requests were issued.
+func Run(ctx context.Context, cfg Config) (Summary, []Result) {
 	client := &http.Client{Transport: &http.Transport{MaxIdleConnsPerHost: cfg.Concurrency + 8}}
 	prompts := makePrefixes(cfg)
 	jobs := make(chan int)
@@ -85,6 +87,7 @@ func Run(ctx context.Context, cfg Config) Summary {
 					p = int(zipf.Uint64())
 				}
 				results[i] = one(ctx, client, cfg, prompts[p], randomWords(rng, cfg.SuffixTokens))
+				results[i].Prefix = p
 			}
 		}(w)
 	}
@@ -93,7 +96,7 @@ func Run(ctx context.Context, cfg Config) Summary {
 	}
 	close(jobs)
 	wg.Wait()
-	return summarise(cfg, results, time.Since(start))
+	return summarise(cfg, results, time.Since(start)), results
 }
 
 func one(ctx context.Context, client *http.Client, cfg Config, system, user string) Result {
