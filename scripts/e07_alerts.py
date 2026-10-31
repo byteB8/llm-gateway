@@ -513,15 +513,38 @@ def markdown(out):
     print("\n".join(rows))
 
 
+def compare():
+    """README table: the two backend failures before and after outlier ejection (and FQDN backend names)."""
+    builds = [("e07", "no ejection (e07)"), ("e07-ejection", "outlier ejection"),
+              ("e07-ejection-fqdn", "ejection + fully qualified names")]
+    rows = ["| Fault (3 min) | Build | Failed attempts | Requests stalled > 1 s | First tokens > 500 ms | Ticket after |",
+            "|---|---|---|---|---|---|"]
+    for sid, fault in (("C1", "Backend down"), ("C5", "Backend answers 503")):
+        for tag, build in builds:
+            f = OUT.with_name(f"{tag}.json")
+            if not f.exists():
+                continue
+            e = next(e for e in json.loads(f.read_text())["scenarios"] if e["id"] == sid)
+            c = e["client"]["base"]
+            ticket = next((a["ttd_s"] for a in e["alerts"] if a["alert"].startswith("LLMGatewayBackendFailing")), None)
+            rows.append(f"| {fault} | {build} | {e['sli']['failed_backend_attempts']:,.0f} | {c['ttft_over_1s']} | "
+                        f"{c['ttft_over_500ms']:.1%} | {secs(ticket) if ticket else 'none'} |")
+    print("\n".join(rows))
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--schedule", choices=["full", "ejection", "smoke"], default="full")
     ap.add_argument("--label", default="", help="names a variant of a schedule, e.g. a different build")
     ap.add_argument("--analyse", action="store_true", help="only analyse the last run of the schedule")
     ap.add_argument("--markdown", action="store_true", help="print the README table from the saved analysis")
+    ap.add_argument("--compare", action="store_true", help="print the before/after table for outlier ejection")
     a = ap.parse_args()
     TAG = run_tag(a.schedule, a.label)
     os.environ["PATH"] = f"{Path.home() / 'opt' / 'bin'}:{os.environ['PATH']}"
+    if a.compare:
+        compare()
+        sys.exit()
     if a.markdown:
         markdown(json.loads((RAW / "e07-smoke.json" if a.schedule == "smoke" else OUT.with_name(f"{TAG}.json")).read_text()))
         sys.exit()

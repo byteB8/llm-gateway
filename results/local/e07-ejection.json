@@ -1,0 +1,188 @@
+{
+ "experiment": "e07-ejection",
+ "schedule": "ejection",
+ "label": "",
+ "started": "2026-10-31T15:40:39.986+00:00",
+ "minutes": 14,
+ "load": {
+  "rate": 8,
+  "prefixes": 16,
+  "prefix_tokens": 1000,
+  "suffix_tokens": 50,
+  "max_tokens": 64
+ },
+ "compression": 12,
+ "scenarios": [
+  {
+   "id": "F0",
+   "what": "no fault",
+   "kind": "quiet",
+   "inject": "2026-10-31T15:40:39.987+00:00",
+   "minutes": 4.0,
+   "client": {
+    "base": {
+     "requests": 1884,
+     "ok": 1882,
+     "errors": {
+      "cut": 2
+     },
+     "ttft_over_500ms": 0.0021,
+     "ttft_over_1s": 0
+    }
+   },
+   "sli": {
+    "availability_bad": 0.0,
+    "latency_bad": 0.00221,
+    "requests_per_s": 7.70657,
+    "failed_backend_attempts": 0.0,
+    "usage_events_lost": 0.0
+   },
+   "predicted_pages": {
+    "LLMGatewayAvailabilityFastBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayAvailabilitySlowBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayLatencyFastBurn": {
+     "burn_rate": 0.22,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayLatencySlowBurn": {
+     "burn_rate": 0.22,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    }
+   },
+   "alerts": [],
+   "pages": 0,
+   "page_outcomes": {}
+  },
+  {
+   "id": "C1",
+   "what": "backend fakellm-3 down (StatefulSet scaled to 3)",
+   "kind": "cause",
+   "inject": "2026-10-31T15:44:40.150+00:00",
+   "minutes": 3.02,
+   "client": {
+    "base": {
+     "requests": 1437,
+     "ok": 1437,
+     "errors": {},
+     "ttft_over_500ms": 0.0167,
+     "ttft_over_1s": 3
+    }
+   },
+   "sli": {
+    "availability_bad": 0.0,
+    "latency_bad": 0.01593,
+    "requests_per_s": 7.89143,
+    "failed_backend_attempts": 17.58286,
+    "usage_events_lost": 0.0
+   },
+   "predicted_pages": {
+    "LLMGatewayAvailabilityFastBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayAvailabilitySlowBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayLatencyFastBurn": {
+     "burn_rate": 1.59,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayLatencySlowBurn": {
+     "burn_rate": 1.59,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    }
+   },
+   "alerts": [
+    {
+     "alert": "LLMGatewayBackendFailing/fakellm-3",
+     "severity": "ticket",
+     "ttd_s": 37.7,
+     "fired_in_prometheus_s": 37.7,
+     "episodes": 1,
+     "resolved_after_clear_s": 16.3
+    }
+   ],
+   "pages": 0,
+   "page_outcomes": {}
+  },
+  {
+   "id": "C5",
+   "what": "backend fakellm-2 answers every request with 503",
+   "kind": "cause",
+   "inject": "2026-10-31T15:48:39.990+00:00",
+   "minutes": 3.02,
+   "client": {
+    "base": {
+     "requests": 1430,
+     "ok": 1430,
+     "errors": {},
+     "ttft_over_500ms": 0.0231,
+     "ttft_over_1s": 5
+    }
+   },
+   "sli": {
+    "availability_bad": 0.0,
+    "latency_bad": 0.02315,
+    "requests_per_s": 7.89714,
+    "failed_backend_attempts": 18.5188,
+    "usage_events_lost": 0.0
+   },
+   "predicted_pages": {
+    "LLMGatewayAvailabilityFastBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayAvailabilitySlowBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayLatencyFastBurn": {
+     "burn_rate": 2.32,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayLatencySlowBurn": {
+     "burn_rate": 2.32,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    }
+   },
+   "alerts": [
+    {
+     "alert": "LLMGatewayBackendFailing/fakellm-2",
+     "severity": "ticket",
+     "ttd_s": 37.8,
+     "fired_in_prometheus_s": 37.8,
+     "episodes": 1,
+     "resolved_after_clear_s": 16.6
+    }
+   ],
+   "pages": 0,
+   "page_outcomes": {}
+  }
+ ],
+ "false_pages": 0,
+ "page_scorecard": {
+  "hit": 0,
+  "miss": 0,
+  "false page": 0
+ },
+ "quiet_alerts": 0
+}
