@@ -16,9 +16,11 @@ import (
 	"time"
 
 	"github.com/byteB8/llm-gateway/internal/limit"
+	"github.com/byteB8/llm-gateway/internal/metrics"
 	"github.com/byteB8/llm-gateway/internal/openai"
 	"github.com/byteB8/llm-gateway/internal/router"
 	"github.com/byteB8/llm-gateway/internal/usage"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type Config struct {
@@ -28,6 +30,7 @@ type Config struct {
 	DefaultMaxTokens      int           // reserved for a request that sets no max_tokens
 	BackendKey            string        // sent to backends as a bearer token (vLLM --api-key)
 	Publisher             usage.Publisher
+	Metrics               *metrics.Gateway // nil: metrics go to a private registry nobody scrapes
 }
 
 type Server struct {
@@ -52,6 +55,26 @@ func New(cfg Config, backends []*router.Backend, policy router.Policy, log *slog
 	}
 	if cfg.Publisher == nil {
 		cfg.Publisher = usage.Nop{}
+	}
+	if cfg.Metrics == nil {
+		cfg.Metrics = metrics.NewGateway(prometheus.NewRegistry())
+	}
+	for _, b := range backends {
+		b := b
+		lbl := prometheus.Labels{"backend": b.Name}
+		cfg.Metrics.GaugeFunc("llmgw_backend_inflight", "Requests in flight to the backend.", lbl, func() float64 { return float64(b.Inflight()) })
+		cfg.Metrics.GaugeFunc("llmgw_backend_capacity", "Requests the backend serves at once (0 = unknown).", lbl, func() float64 { return float64(b.Capacity) })
+	}
+	if k, ok := cfg.Publisher.(interface{ Stats() usage.Stats }); ok {
+		for result, f := range map[string]func(usage.Stats) int64{
+			"published": func(s usage.Stats) int64 { return s.Published },
+			"failed":    func(s usage.Stats) int64 { return s.Failed },
+			"dropped":   func(s usage.Stats) int64 { return s.Dropped },
+		} {
+			f := f
+			cfg.Metrics.CounterFunc("llmgw_usage_events_total", "Usage events handed to Kafka, by outcome.",
+				prometheus.Labels{"result": result}, func() float64 { return float64(f(k.Stats())) })
+		}
 	}
 	limiter := limit.New(nil)
 	if cfg.Tenants != nil {
@@ -127,16 +150,19 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Request-Id", reqID)
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
 	if err != nil {
+		s.count("unknown", "none", http.StatusRequestEntityTooLarge)
 		writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
 		return
 	}
 	var req openai.ChatRequest
 	if err := json.Unmarshal(body, &req); err != nil || len(req.Messages) == 0 {
+		s.count("unknown", "none", http.StatusBadRequest)
 		writeError(w, http.StatusBadRequest, "body must be a chat request with at least one message")
 		return
 	}
 	tenant, ok := s.cfg.Tenants.identify(r)
 	if !ok {
+		s.count("unknown", "none", http.StatusUnauthorized)
 		writeError(w, http.StatusUnauthorized, "missing or unknown API key")
 		return
 	}
@@ -156,6 +182,8 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(d.RetryAfter.Seconds()))))
 		}
 		s.log.Info("rate limited", "tenant", tenant, "reason", d.Reason)
+		s.cfg.Metrics.RateLimited.WithLabelValues(tenant, d.Reason).Inc()
+		s.count(tenant, "none", http.StatusTooManyRequests)
 		writeError(w, http.StatusTooManyRequests, "rate limit exceeded: "+d.Reason)
 		return
 	}
@@ -164,6 +192,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		// OpenAI-style servers (vLLM included) report usage in a stream only when asked; the
 		// limiter's refund and the billing events need it.
 		if body, err = withStreamUsage(body); err != nil {
+			s.count(tenant, "none", http.StatusBadRequest)
 			writeError(w, http.StatusBadRequest, "malformed request body")
 			ticket.Done(0)
 			return
@@ -175,17 +204,21 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		b.Acquire()
 		resp, err := s.forward(r, b, body)
 		if err != nil || resp.StatusCode >= 500 {
+			reason := "connect"
 			if err == nil {
 				lastErr = b.Name + ": status " + strconv.Itoa(resp.StatusCode)
 				resp.Body.Close()
+				reason = "status_5xx"
 			} else {
 				lastErr = b.Name + ": " + err.Error()
 			}
 			b.Release()
 			if r.Context().Err() != nil { // the client went away; don't try the others
+				s.count(tenant, b.Name, 499) // nginx's "client closed request"
 				ticket.Done(0)
 				return
 			}
+			s.cfg.Metrics.BackendFailures.WithLabelValues(b.Name, reason).Inc()
 			s.log.Warn("backend failed", "backend", b.Name, "attempt", attempt+1, "err", lastErr)
 			continue
 		}
@@ -197,6 +230,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 			used, prompt, completion = u.TotalTokens, u.PromptTokens, u.CompletionTokens
 		}
 		ticket.Done(used)
+		s.record(tenant, b.Name, resp.StatusCode, ttfb, n, time.Since(start), prompt, completion, used >= 0, copyErr)
 		s.cfg.Publisher.Publish(usage.Event{
 			RequestID: reqID, Tenant: tenant, Backend: b.Name, Model: req.Model, Status: resp.StatusCode,
 			Stream: req.Stream, PromptTokens: prompt, CompletionTokens: completion, UsageKnown: used >= 0,
@@ -208,6 +242,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ticket.Done(0)
+	s.count(tenant, "none", http.StatusBadGateway)
 	s.cfg.Publisher.Publish(usage.Event{RequestID: reqID, Tenant: tenant, Model: req.Model, Status: http.StatusBadGateway,
 		Stream: req.Stream, UsageKnown: true, DurationMs: ms(time.Since(start)), Time: start.UTC()})
 	s.log.Error("all backends failed", "tried", len(order), "last", lastErr)
@@ -254,7 +289,7 @@ func (s *Server) stream(w http.ResponseWriter, resp *http.Response, b *router.Ba
 			total += int64(n)
 			tap.Write(buf[:n])
 			if _, werr := w.Write(buf[:n]); werr != nil {
-				return ttfb, total, werr
+				return ttfb, total, &streamError{side: "client", err: werr}
 			}
 			if flusher != nil {
 				flusher.Flush()
@@ -264,7 +299,10 @@ func (s *Server) stream(w http.ResponseWriter, resp *http.Response, b *router.Ba
 			if errors.Is(rerr, io.EOF) {
 				return ttfb, total, nil
 			}
-			return ttfb, total, rerr
+			if r := resp.Request; r != nil && r.Context().Err() != nil {
+				return ttfb, total, &streamError{side: "client", err: rerr} // our read stopped because the client left
+			}
+			return ttfb, total, &streamError{side: "backend", err: rerr}
 		}
 	}
 }
@@ -310,4 +348,36 @@ func withStreamUsage(body []byte) ([]byte, error) {
 	}
 	m["stream_options"] = b
 	return json.Marshal(m)
+}
+
+// streamError says which side broke a response that had already started.
+type streamError struct {
+	side string // "client" or "backend"
+	err  error
+}
+
+func (e *streamError) Error() string { return e.side + ": " + e.err.Error() }
+func (e *streamError) Unwrap() error { return e.err }
+
+func (s *Server) count(tenant, backend string, code int) {
+	s.cfg.Metrics.Requests.WithLabelValues(tenant, backend, strconv.Itoa(code)).Inc()
+}
+
+// record updates the metrics of a request a backend answered.
+func (s *Server) record(tenant, backend string, code int, ttfb time.Duration, bytes int64, dur time.Duration,
+	prompt, completion int, usageKnown bool, streamErr error) {
+	m := s.cfg.Metrics
+	s.count(tenant, backend, code)
+	if bytes > 0 {
+		m.TTFT.WithLabelValues(backend).Observe(ttfb.Seconds())
+	}
+	m.Duration.WithLabelValues(backend).Observe(dur.Seconds())
+	if usageKnown {
+		m.Tokens.WithLabelValues(tenant, "prompt").Add(float64(prompt))
+		m.Tokens.WithLabelValues(tenant, "completion").Add(float64(completion))
+	}
+	var se *streamError
+	if errors.As(streamErr, &se) {
+		m.Interrupted.WithLabelValues(backend, se.side).Inc()
+	}
 }
