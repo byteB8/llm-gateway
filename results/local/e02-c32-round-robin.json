@@ -1,0 +1,38 @@
+{
+  "config": {
+    "url": "http://127.0.0.1:8080",
+    "concurrency": 32,
+    "requests": 800,
+    "prefixes": 16,
+    "prefix_tokens": 1000,
+    "suffix_tokens": 50,
+    "max_tokens": 64,
+    "zipf": 0,
+    "seed": 1,
+    "model": "fake"
+  },
+  "requests": 800,
+  "errors": 0,
+  "wall_sec": 53.423081539,
+  "req_per_sec": 14.974800721968514,
+  "tokens_per_sec": 958.3872462059849,
+  "ttft_ms": {
+    "p50": 211.86,
+    "p90": 260.932,
+    "p99": 400.638,
+    "mean": 182.8250737499999
+  },
+  "total_ms": {
+    "p50": 2149.079,
+    "p90": 2196.915,
+    "p99": 2341.979,
+    "mean": 2115.43312125
+  },
+  "cache_hit_rate": 0.24875,
+  "per_backend": {
+    "fake1": 200,
+    "fake2": 200,
+    "fake3": 200,
+    "fake4": 200
+  }
+}
