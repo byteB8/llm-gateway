@@ -1,0 +1,47 @@
+{
+  "config": {
+    "url": "http://127.0.0.1:8200",
+    "concurrency": 16,
+    "requests": 1500,
+    "prefixes": 96,
+    "prefix_tokens": 1500,
+    "suffix_tokens": 20,
+    "max_tokens": 32,
+    "zipf": 0,
+    "seed": 2,
+    "model": "qwen3-1.7b"
+  },
+  "requests": 1500,
+  "errors": 0,
+  "wall_sec": 75.62325261,
+  "req_per_sec": 19.83516905488998,
+  "tokens_per_sec": 634.7254097564794,
+  "ttft_ms": {
+    "p50": 244.96,
+    "p90": 444.442,
+    "p99": 642.475,
+    "mean": 259.28545733333385
+  },
+  "total_ms": {
+    "p50": 779.116,
+    "p90": 1000.867,
+    "p99": 1238.15,
+    "mean": 804.315370666666
+  },
+  "cache_hit_rate": 0,
+  "retries": 0,
+  "prompt_tokens": 2280000,
+  "completion_tokens": 48000,
+  "status_codes": {
+    "200": 1500
+  },
+  "per_backend": {
+    "gpu0": 744,
+    "gpu1": 756
+  },
+  "vllm_prefix_cache": {
+    "query_tokens": 2304139,
+    "hit_tokens": 1278688,
+    "hit_rate": 0.555
+  }
+}
