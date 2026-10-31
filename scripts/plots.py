@@ -315,8 +315,8 @@ def detect(mode, path="results/local/e07.json"):
     ax.set_xlabel("predicted time from fault to page", color=t["muted"], fontsize=8.5)
     ax.set_ylabel("measured", color=t["muted"], fontsize=8.5)
     ax.plot([lo, hi], [lo, hi], color=t["muted"], linewidth=1, zorder=2)
-    ax.annotate("measured = predicted", (1100, 1100), xytext=(-4, 6), textcoords="offset points", color=t["muted"],
-                fontsize=8.5, ha="right", va="bottom", rotation=45, rotation_mode="anchor", transform_rotates_text=True)
+    ax.text(0.985, 0.04, "on the diagonal: fired exactly when predicted", transform=ax.transAxes, color=t["muted"],
+            fontsize=8.5, ha="right", va="bottom")
     for x, y, fast, _, _ in points:
         ax.scatter([x], [y], s=64, color=t["series"][0 if fast else 1], edgecolors=t["surface"], linewidths=2, zorder=4)
     place_labels(ax, fig, [(x, y, trial + (f" · flapped, {n} pages" if n > 1 else "")) for x, y, _, trial, n in points], t)

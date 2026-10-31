@@ -1,0 +1,336 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="691.2pt" height="360pt" viewBox="0 0 691.2 360" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ 
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 360 
+L 691.2 360 
+L 691.2 0 
+L 0 0 
+z
+" style="fill: #fcfcfb"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 76.032 316.8 
+L 670.464 316.8 
+L 670.464 97.2 
+L 76.032 97.2 
+z
+" style="fill: #fcfcfb"/>
+   </g>
+   <g id="matplotlib.axis_1">
+    <g id="xtick_1">
+     <g id="line2d_1">
+      <path d="M 100.764339 316.8 
+L 100.764339 97.2 
+" clip-path="url(#p06067e2009)" style="fill: none; stroke: #e1e0d9; stroke-width: 0.75; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_2"/>
+     <g id="text_1">
+      <text style="font-size: 9px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: middle; fill: #898781" x="100.764339" y="327.137891" transform="rotate(-0 100.764339 327.137891)">30 s</text>
+     </g>
+    </g>
+    <g id="xtick_2">
+     <g id="line2d_3">
+      <path d="M 194.791349 316.8 
+L 194.791349 97.2 
+" clip-path="url(#p06067e2009)" style="fill: none; stroke: #e1e0d9; stroke-width: 0.75; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_4"/>
+     <g id="text_2">
+      <text style="font-size: 9px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: middle; fill: #898781" x="194.791349" y="327.138594" transform="rotate(-0 194.791349 327.138594)">1 min</text>
+     </g>
+    </g>
+    <g id="xtick_3">
+     <g id="line2d_5">
+      <path d="M 288.81836 316.8 
+L 288.81836 97.2 
+" clip-path="url(#p06067e2009)" style="fill: none; stroke: #e1e0d9; stroke-width: 0.75; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_6"/>
+     <g id="text_3">
+      <text style="font-size: 9px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: middle; fill: #898781" x="288.81836" y="327.138594" transform="rotate(-0 288.81836 327.138594)">2 min</text>
+     </g>
+    </g>
+    <g id="xtick_4">
+     <g id="line2d_7">
+      <path d="M 413.115307 316.8 
+L 413.115307 97.2 
+" clip-path="url(#p06067e2009)" style="fill: none; stroke: #e1e0d9; stroke-width: 0.75; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_8"/>
+     <g id="text_4">
+      <text style="font-size: 9px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: middle; fill: #898781" x="413.115307" y="327.138594" transform="rotate(-0 413.115307 327.138594)">5 min</text>
+     </g>
+    </g>
+    <g id="xtick_5">
+     <g id="line2d_9">
+      <path d="M 507.142318 316.8 
+L 507.142318 97.2 
+" clip-path="url(#p06067e2009)" style="fill: none; stroke: #e1e0d9; stroke-width: 0.75; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_10"/>
+     <g id="text_5">
+      <text style="font-size: 9px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: middle; fill: #898781" x="507.142318" y="327.138594" transform="rotate(-0 507.142318 327.138594)">10 min</text>
+     </g>
+    </g>
+    <g id="xtick_6">
+     <g id="line2d_11">
+      <path d="M 601.169328 316.8 
+L 601.169328 97.2 
+" clip-path="url(#p06067e2009)" style="fill: none; stroke: #e1e0d9; stroke-width: 0.75; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_12"/>
+     <g id="text_6">
+      <text style="font-size: 9px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: middle; fill: #898781" x="601.169328" y="327.138594" transform="rotate(-0 601.169328 327.138594)">20 min</text>
+     </g>
+    </g>
+    <g id="text_7">
+     <text style="font-size: 8.5px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: middle; fill: #898781" x="373.248" y="339.759375" transform="rotate(-0 373.248 339.759375)">predicted time from fault to page</text>
+    </g>
+   </g>
+   <g id="matplotlib.axis_2">
+    <g id="ytick_1">
+     <g id="line2d_13">
+      <path d="M 76.032 307.663174 
+L 670.464 307.663174 
+" clip-path="url(#p06067e2009)" style="fill: none; stroke: #e1e0d9; stroke-width: 0.75; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_14"/>
+     <g id="text_8">
+      <text style="font-size: 9px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: end; fill: #898781" x="72.532" y="311.08212" transform="rotate(-0 72.532 311.08212)">30 s</text>
+     </g>
+    </g>
+    <g id="ytick_2">
+     <g id="line2d_15">
+      <path d="M 76.032 272.926936 
+L 670.464 272.926936 
+" clip-path="url(#p06067e2009)" style="fill: none; stroke: #e1e0d9; stroke-width: 0.75; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_16"/>
+     <g id="text_9">
+      <text style="font-size: 9px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: end; fill: #898781" x="72.532" y="276.346233" transform="rotate(-0 72.532 276.346233)">1 min</text>
+     </g>
+    </g>
+    <g id="ytick_3">
+     <g id="line2d_17">
+      <path d="M 76.032 238.190698 
+L 670.464 238.190698 
+" clip-path="url(#p06067e2009)" style="fill: none; stroke: #e1e0d9; stroke-width: 0.75; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_18"/>
+     <g id="text_10">
+      <text style="font-size: 9px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: end; fill: #898781" x="72.532" y="241.609995" transform="rotate(-0 72.532 241.609995)">2 min</text>
+     </g>
+    </g>
+    <g id="ytick_4">
+     <g id="line2d_19">
+      <path d="M 76.032 192.271889 
+L 670.464 192.271889 
+" clip-path="url(#p06067e2009)" style="fill: none; stroke: #e1e0d9; stroke-width: 0.75; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_20"/>
+     <g id="text_11">
+      <text style="font-size: 9px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: end; fill: #898781" x="72.532" y="195.691186" transform="rotate(-0 72.532 195.691186)">5 min</text>
+     </g>
+    </g>
+    <g id="ytick_5">
+     <g id="line2d_21">
+      <path d="M 76.032 157.535651 
+L 670.464 157.535651 
+" clip-path="url(#p06067e2009)" style="fill: none; stroke: #e1e0d9; stroke-width: 0.75; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_22"/>
+     <g id="text_12">
+      <text style="font-size: 9px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: end; fill: #898781" x="72.532" y="160.954947" transform="rotate(-0 72.532 160.954947)">10 min</text>
+     </g>
+    </g>
+    <g id="ytick_6">
+     <g id="line2d_23">
+      <path d="M 76.032 122.799412 
+L 670.464 122.799412 
+" clip-path="url(#p06067e2009)" style="fill: none; stroke: #e1e0d9; stroke-width: 0.75; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_24"/>
+     <g id="text_13">
+      <text style="font-size: 9px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: end; fill: #898781" x="72.532" y="126.218709" transform="rotate(-0 72.532 126.218709)">20 min</text>
+     </g>
+    </g>
+    <g id="text_14">
+     <text style="font-size: 8.5px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: middle; fill: #898781" x="35.20657" y="207" transform="rotate(-90 35.20657 207)">measured</text>
+    </g>
+   </g>
+   <g id="line2d_25">
+    <path d="M 76.032 316.8 
+L 670.464 97.2 
+" clip-path="url(#p06067e2009)" style="fill: none; stroke: #898781; stroke-linecap: square"/>
+   </g>
+   <g id="patch_3">
+    <path d="M 76.032 316.8 
+L 670.464 316.8 
+" style="fill: none; stroke: #c3c2b7; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="text_15">
+    <text style="font-size: 8.5px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: end; fill: #898781" x="661.54752" y="305.974008" transform="rotate(-0 661.54752 305.974008)">on the diagonal: fired exactly when predicted</text>
+   </g>
+   <g id="PathCollection_1">
+    <defs>
+     <path id="mdb9236f832" d="M 0 4 
+C 1.060812 4 2.078319 3.578535 2.828427 2.828427 
+C 3.578535 2.078319 4 1.060812 4 0 
+C 4 -1.060812 3.578535 -2.078319 2.828427 -2.828427 
+C 2.078319 -3.578535 1.060812 -4 0 -4 
+C -1.060812 -4 -2.078319 -3.578535 -2.828427 -2.828427 
+C -3.578535 -2.078319 -4 -1.060812 -4 0 
+C -4 1.060812 -3.578535 2.078319 -2.828427 2.828427 
+C -2.078319 3.578535 -1.060812 4 0 4 
+z
+" style="stroke: #fcfcfb; stroke-width: 2"/>
+    </defs>
+    <g clip-path="url(#p06067e2009)">
+     <use xlink:href="#mdb9236f832" x="147.373073" y="286.133506" style="fill: #2a78d6; stroke: #fcfcfb; stroke-width: 2"/>
+    </g>
+   </g>
+   <g id="PathCollection_2">
+    <defs>
+     <path id="m1202834144" d="M 0 4 
+C 1.060812 4 2.078319 3.578535 2.828427 2.828427 
+C 3.578535 2.078319 4 1.060812 4 0 
+C 4 -1.060812 3.578535 -2.078319 2.828427 -2.828427 
+C 2.078319 -3.578535 1.060812 -4 0 -4 
+C -1.060812 -4 -2.078319 -3.578535 -2.828427 -2.828427 
+C -3.578535 -2.078319 -4 -1.060812 -4 0 
+C -4 1.060812 -3.578535 2.078319 -2.828427 2.828427 
+C -2.078319 3.578535 -1.060812 4 0 4 
+z
+" style="stroke: #fcfcfb; stroke-width: 2"/>
+    </defs>
+    <g clip-path="url(#p06067e2009)">
+     <use xlink:href="#m1202834144" x="269.406401" y="239.84645" style="fill: #eb6834; stroke: #fcfcfb; stroke-width: 2"/>
+    </g>
+   </g>
+   <g id="PathCollection_3">
+    <g clip-path="url(#p06067e2009)">
+     <use xlink:href="#mdb9236f832" x="365.889309" y="207.564986" style="fill: #2a78d6; stroke: #fcfcfb; stroke-width: 2"/>
+    </g>
+   </g>
+   <g id="PathCollection_4">
+    <g clip-path="url(#p06067e2009)">
+     <use xlink:href="#m1202834144" x="489.002636" y="164.122525" style="fill: #eb6834; stroke: #fcfcfb; stroke-width: 2"/>
+    </g>
+   </g>
+   <g id="PathCollection_5">
+    <g clip-path="url(#p06067e2009)">
+     <use xlink:href="#mdb9236f832" x="374.45183" y="198.281049" style="fill: #2a78d6; stroke: #fcfcfb; stroke-width: 2"/>
+    </g>
+   </g>
+   <g id="PathCollection_6">
+    <g clip-path="url(#p06067e2009)">
+     <use xlink:href="#m1202834144" x="500.017571" y="159.572696" style="fill: #eb6834; stroke: #fcfcfb; stroke-width: 2"/>
+    </g>
+   </g>
+   <g id="PathCollection_7">
+    <g clip-path="url(#p06067e2009)">
+     <use xlink:href="#mdb9236f832" x="364.989669" y="211.08566" style="fill: #2a78d6; stroke: #fcfcfb; stroke-width: 2"/>
+    </g>
+   </g>
+   <g id="PathCollection_8">
+    <g clip-path="url(#p06067e2009)">
+     <use xlink:href="#m1202834144" x="476.078759" y="168.085371" style="fill: #eb6834; stroke: #fcfcfb; stroke-width: 2"/>
+    </g>
+   </g>
+   <g id="PathCollection_9">
+    <g clip-path="url(#p06067e2009)">
+     <use xlink:href="#m1202834144" x="593.603048" y="127.109794" style="fill: #eb6834; stroke: #fcfcfb; stroke-width: 2"/>
+    </g>
+   </g>
+   <g id="text_16">
+    <text style="font-weight: 600; font-size: 9px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: end; fill: #0b0b0b" x="584.603048" y="129.447685" transform="rotate(-0 584.603048 129.447685)">A3</text>
+   </g>
+   <g id="text_17">
+    <text style="font-weight: 600; font-size: 9px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: start; fill: #0b0b0b" x="509.017571" y="161.910587" transform="rotate(-0 509.017571 161.910587)">A2</text>
+   </g>
+   <g id="patch_4">
+    <path d="M 481.499794 157.619352 
+Q 483.362683 159.234031 485.225571 160.848711 
+" style="fill: none; stroke: #898781; stroke-width: 0.75; stroke-linecap: round"/>
+   </g>
+   <g id="text_18">
+    <text style="font-weight: 600; font-size: 9px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: end; fill: #0b0b0b" x="480.002636" y="153.460416" transform="rotate(-0 480.002636 153.460416)">L1</text>
+   </g>
+   <g id="text_19">
+    <text style="font-weight: 600; font-size: 9px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: end; fill: #0b0b0b" x="467.078759" y="170.423262" transform="rotate(-0 467.078759 170.423262)">L2</text>
+   </g>
+   <g id="text_20">
+    <text style="font-weight: 600; font-size: 9px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: start; fill: #0b0b0b" x="383.45183" y="200.619291" transform="rotate(-0 383.45183 200.619291)">A2 · flapped, 3 pages</text>
+   </g>
+   <g id="patch_5">
+    <path d="M 358.386468 201.061812 
+Q 360.249356 202.676491 362.112244 204.291171 
+" style="fill: none; stroke: #898781; stroke-width: 0.75; stroke-linecap: round"/>
+   </g>
+   <g id="text_21">
+    <text style="font-weight: 600; font-size: 9px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: end; fill: #0b0b0b" x="356.889309" y="196.902876" transform="rotate(-0 356.889309 196.902876)">L1</text>
+   </g>
+   <g id="text_22">
+    <text style="font-weight: 600; font-size: 9px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: end; fill: #0b0b0b" x="355.989669" y="213.423903" transform="rotate(-0 355.989669 213.423903)">L2 · flapped, 2 pages</text>
+   </g>
+   <g id="text_23">
+    <text style="font-weight: 600; font-size: 9px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: end; fill: #0b0b0b" x="260.406401" y="242.184341" transform="rotate(-0 260.406401 242.184341)">A1</text>
+   </g>
+   <g id="text_24">
+    <text style="font-weight: 600; font-size: 9px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: end; fill: #0b0b0b" x="138.373073" y="288.471397" transform="rotate(-0 138.373073 288.471397)">A1</text>
+   </g>
+  </g>
+  <g id="patch_6">
+   <path d="M 29.0304 80.1 
+L 35.2656 80.1 
+Q 36.648 80.1 36.648 79.38 
+L 36.648 71.82 
+Q 36.648 71.1 35.2656 71.1 
+L 29.0304 71.1 
+Q 27.648 71.1 27.648 71.82 
+L 27.648 79.38 
+Q 27.648 80.1 29.0304 80.1 
+z
+" style="fill: #2a78d6"/>
+  </g>
+  <g id="patch_7">
+   <path d="M 244.450525 80.1 
+L 250.685725 80.1 
+Q 252.068125 80.1 252.068125 79.38 
+L 252.068125 71.82 
+Q 252.068125 71.1 250.685725 71.1 
+L 244.450525 71.1 
+Q 243.068125 71.1 243.068125 71.82 
+L 243.068125 79.38 
+Q 243.068125 80.1 244.450525 80.1 
+z
+" style="fill: #eb6834"/>
+  </g>
+  <g id="text_25">
+   <text style="font-weight: 600; font-size: 13px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: start; fill: #0b0b0b" x="27.648" y="18.877969" transform="rotate(-0 27.648 18.877969)">When the SLO alerts paged: predicted and measured</text>
+  </g>
+  <g id="text_26">
+   <text style="font-size: 9px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; fill: #52514e" transform="translate(27.648 43.433437)">Faults injected one at a time under steady load (kind, 8 requests/s). Predicted: when the long window's error ratio crosses the alert's threshold,</text>
+   <text style="font-size: 9px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; fill: #52514e" transform="translate(27.648 56.933437)">from the error ratio and traffic Prometheus measured during the fault (windows compressed 12x). Measured: arrival at Alertmanager's webhook.</text>
+  </g>
+  <g id="text_27">
+   <text style="font-size: 9.5px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: start; fill: #52514e" x="42.048" y="78.068145" transform="rotate(-0 42.048 78.068145)">fast burn: 14.4x over 5 min and 30 s</text>
+  </g>
+  <g id="text_28">
+   <text style="font-size: 9.5px; font-family:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-anchor: start; fill: #52514e" x="257.468125" y="78.068145" transform="rotate(-0 257.468125 78.068145)">slow burn: 6x over 30 min and 150 s</text>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="p06067e2009">
+   <rect x="76.032" y="97.2" width="594.432" height="219.6"/>
+  </clipPath>
+ </defs>
+</svg>

@@ -1,0 +1,701 @@
+{
+ "experiment": "e07",
+ "schedule": "full",
+ "label": "",
+ "started": "2026-10-31T10:08:52.338+00:00",
+ "minutes": 137,
+ "load": {
+  "rate": 8,
+  "prefixes": 16,
+  "prefix_tokens": 1000,
+  "suffix_tokens": 50,
+  "max_tokens": 64
+ },
+ "compression": 12,
+ "scenarios": [
+  {
+   "id": "F0",
+   "what": "no fault: normal traffic only",
+   "kind": "quiet",
+   "inject": "2026-10-31T10:08:52.338+00:00",
+   "minutes": 30.0,
+   "client": {
+    "base": {
+     "requests": 14307,
+     "ok": 14307,
+     "errors": {},
+     "ttft_over_500ms": 0.0004,
+     "ttft_over_1s": 0
+    }
+   },
+   "sli": {
+    "availability_bad": 0.0,
+    "latency_bad": 0.00042,
+    "requests_per_s": 7.9493,
+    "failed_backend_attempts": 0.0,
+    "usage_events_lost": 0.0
+   },
+   "predicted_pages": {
+    "LLMGatewayAvailabilityFastBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayAvailabilitySlowBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayLatencyFastBurn": {
+     "burn_rate": 0.04,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayLatencySlowBurn": {
+     "burn_rate": 0.04,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    }
+   },
+   "alerts": [],
+   "pages": 0,
+   "page_outcomes": {}
+  },
+  {
+   "id": "A1",
+   "what": "all backends cut 50% of streams after the first token",
+   "kind": "slo",
+   "inject": "2026-10-31T10:38:52.371+00:00",
+   "minutes": 4.0,
+   "client": {
+    "base": {
+     "requests": 1983,
+     "ok": 998,
+     "errors": {
+      "cut": 985
+     },
+     "ttft_over_500ms": 0.0,
+     "ttft_over_1s": 0
+    }
+   },
+   "sli": {
+    "availability_bad": 0.49897,
+    "latency_bad": 0.0,
+    "requests_per_s": 8.28936,
+    "failed_backend_attempts": 0.0,
+    "usage_events_lost": 0.0
+   },
+   "predicted_pages": {
+    "LLMGatewayAvailabilityFastBurn": {
+     "burn_rate": 99.79,
+     "ttd_s": 43.3,
+     "ttd_traffic_s": 42.3
+    },
+    "LLMGatewayAvailabilitySlowBurn": {
+     "burn_rate": 99.79,
+     "ttd_s": 108.2,
+     "ttd_traffic_s": 104.0
+    },
+    "LLMGatewayLatencyFastBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayLatencySlowBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    }
+   },
+   "alerts": [
+    {
+     "alert": "LLMGatewayAvailabilityFastBurn",
+     "severity": "page",
+     "ttd_s": 46.1,
+     "fired_in_prometheus_s": 46.1,
+     "episodes": 1,
+     "resolved_after_clear_s": 26.1
+    },
+    {
+     "alert": "LLMGatewayAvailabilitySlowBurn",
+     "severity": "page",
+     "ttd_s": 116.1,
+     "fired_in_prometheus_s": 116.1,
+     "episodes": 1,
+     "resolved_after_clear_s": 146.1
+    }
+   ],
+   "pages": 2,
+   "page_outcomes": {
+    "LLMGatewayAvailabilityFastBurn": "hit",
+    "LLMGatewayAvailabilitySlowBurn": "hit"
+   }
+  },
+  {
+   "id": "L1",
+   "what": "backend fakellm-1 adds 1 s before the first token",
+   "kind": "slo",
+   "inject": "2026-10-31T10:43:52.340+00:00",
+   "minutes": 14.0,
+   "client": {
+    "base": {
+     "requests": 6742,
+     "ok": 6742,
+     "errors": {},
+     "ttft_over_500ms": 0.2054,
+     "ttft_over_1s": 1370
+    }
+   },
+   "sli": {
+    "availability_bad": 0.0,
+    "latency_bad": 0.20558,
+    "requests_per_s": 8.03353,
+    "failed_backend_attempts": 0.0,
+    "usage_events_lost": 0.0
+   },
+   "predicted_pages": {
+    "LLMGatewayAvailabilityFastBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayAvailabilitySlowBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayLatencyFastBurn": {
+     "burn_rate": 20.56,
+     "ttd_s": 210.1,
+     "ttd_traffic_s": 211.8
+    },
+    "LLMGatewayLatencySlowBurn": {
+     "burn_rate": 20.56,
+     "ttd_s": 525.4,
+     "ttd_traffic_s": 524.9
+    }
+   },
+   "alerts": [
+    {
+     "alert": "LLMGatewayLatencyFastBurn",
+     "severity": "page",
+     "ttd_s": 221.1,
+     "fired_in_prometheus_s": 221.1,
+     "episodes": 1,
+     "resolved_after_clear_s": 21.2
+    },
+    {
+     "alert": "LLMGatewayLatencySlowBurn",
+     "severity": "page",
+     "ttd_s": 526.1,
+     "fired_in_prometheus_s": 526.1,
+     "episodes": 1,
+     "resolved_after_clear_s": 126.2
+    }
+   ],
+   "pages": 2,
+   "page_outcomes": {
+    "LLMGatewayLatencyFastBurn": "hit",
+    "LLMGatewayLatencySlowBurn": "hit"
+   }
+  },
+  {
+   "id": "C1",
+   "what": "backend fakellm-3 down (StatefulSet scaled to 3)",
+   "kind": "cause",
+   "inject": "2026-10-31T10:58:52.403+00:00",
+   "minutes": 3.01,
+   "client": {
+    "base": {
+     "requests": 1445,
+     "ok": 1445,
+     "errors": {},
+     "ttft_over_500ms": 0.0311,
+     "ttft_over_1s": 24
+    }
+   },
+   "sli": {
+    "availability_bad": 0.0,
+    "latency_bad": 0.03198,
+    "requests_per_s": 8.04,
+    "failed_backend_attempts": 444.34286,
+    "usage_events_lost": 0.0
+   },
+   "predicted_pages": {
+    "LLMGatewayAvailabilityFastBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayAvailabilitySlowBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayLatencyFastBurn": {
+     "burn_rate": 3.2,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayLatencySlowBurn": {
+     "burn_rate": 3.2,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    }
+   },
+   "alerts": [
+    {
+     "alert": "LLMGatewayBackendFailing/fakellm-3",
+     "severity": "ticket",
+     "ttd_s": 40.4,
+     "fired_in_prometheus_s": 40.4,
+     "episodes": 1,
+     "resolved_after_clear_s": 69.7
+    }
+   ],
+   "pages": 0,
+   "page_outcomes": {}
+  },
+  {
+   "id": "C5",
+   "what": "backend fakellm-2 answers every request with 503",
+   "kind": "cause",
+   "inject": "2026-10-31T11:02:52.340+00:00",
+   "minutes": 3.02,
+   "client": {
+    "base": {
+     "requests": 1451,
+     "ok": 1451,
+     "errors": {},
+     "ttft_over_500ms": 0.0351,
+     "ttft_over_1s": 12
+    }
+   },
+   "sli": {
+    "availability_bad": 0.0,
+    "latency_bad": 0.03651,
+    "requests_per_s": 7.98286,
+    "failed_backend_attempts": 691.93714,
+    "usage_events_lost": 0.0
+   },
+   "predicted_pages": {
+    "LLMGatewayAvailabilityFastBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayAvailabilitySlowBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayLatencyFastBurn": {
+     "burn_rate": 3.65,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayLatencySlowBurn": {
+     "burn_rate": 3.65,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    }
+   },
+   "alerts": [
+    {
+     "alert": "LLMGatewayBackendFailing/fakellm-2",
+     "severity": "ticket",
+     "ttd_s": 40.5,
+     "fired_in_prometheus_s": 40.5,
+     "episodes": 1,
+     "resolved_after_clear_s": 59.4
+    }
+   ],
+   "pages": 0,
+   "page_outcomes": {}
+  },
+  {
+   "id": "C3",
+   "what": "Postgres down (billing writes fail)",
+   "kind": "cause",
+   "inject": "2026-10-31T11:06:52.396+00:00",
+   "minutes": 3.01,
+   "client": {
+    "base": {
+     "requests": 1443,
+     "ok": 1443,
+     "errors": {},
+     "ttft_over_500ms": 0.0,
+     "ttft_over_1s": 0
+    }
+   },
+   "sli": {
+    "availability_bad": 0.0,
+    "latency_bad": 0.0,
+    "requests_per_s": 7.98857,
+    "failed_backend_attempts": 0.0,
+    "usage_events_lost": 0.0
+   },
+   "predicted_pages": {
+    "LLMGatewayAvailabilityFastBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayAvailabilitySlowBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayLatencyFastBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayLatencySlowBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    }
+   },
+   "alerts": [
+    {
+     "alert": "LLMGatewayBillingLag",
+     "severity": "ticket",
+     "ttd_s": 130.4,
+     "fired_in_prometheus_s": 130.4,
+     "episodes": 1,
+     "resolved_after_clear_s": 9.7
+    }
+   ],
+   "pages": 0,
+   "page_outcomes": {}
+  },
+  {
+   "id": "A2",
+   "what": "all backends cut 10% of streams",
+   "kind": "slo",
+   "inject": "2026-10-31T11:12:52.347+00:00",
+   "minutes": 12.0,
+   "client": {
+    "base": {
+     "requests": 5683,
+     "ok": 5141,
+     "errors": {
+      "cut": 542
+     },
+     "ttft_over_500ms": 0.0,
+     "ttft_over_1s": 0
+    }
+   },
+   "sli": {
+    "availability_bad": 0.09537,
+    "latency_bad": 0.0,
+    "requests_per_s": 7.88951,
+    "failed_backend_attempts": 0.0,
+    "usage_events_lost": 0.0
+   },
+   "predicted_pages": {
+    "LLMGatewayAvailabilityFastBurn": {
+     "burn_rate": 19.07,
+     "ttd_s": 226.5,
+     "ttd_traffic_s": 225.6
+    },
+    "LLMGatewayAvailabilitySlowBurn": {
+     "burn_rate": 19.07,
+     "ttd_s": 566.2,
+     "ttd_traffic_s": 569.3
+    },
+    "LLMGatewayLatencyFastBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayLatencySlowBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    }
+   },
+   "alerts": [
+    {
+     "alert": "LLMGatewayAvailabilityFastBurn",
+     "severity": "page",
+     "ttd_s": 266.1,
+     "fired_in_prometheus_s": 266.1,
+     "episodes": 3,
+     "resolved_after_clear_s": 11.1
+    },
+    {
+     "alert": "LLMGatewayAvailabilitySlowBurn",
+     "severity": "page",
+     "ttd_s": 576.1,
+     "fired_in_prometheus_s": 576.1,
+     "episodes": 1,
+     "resolved_after_clear_s": 106.1
+    }
+   ],
+   "pages": 2,
+   "page_outcomes": {
+    "LLMGatewayAvailabilityFastBurn": "hit",
+    "LLMGatewayAvailabilitySlowBurn": "hit"
+   }
+  },
+  {
+   "id": "L2",
+   "what": "a new client sends 2 req/s of 3,000-token prompts that are never reused",
+   "kind": "slo",
+   "inject": "2026-10-31T11:28:52.340+00:00",
+   "minutes": 13.0,
+   "client": {
+    "L2-longprompts": {
+     "requests": 1445,
+     "ok": 1445,
+     "errors": {},
+     "ttft_over_500ms": 0.9945,
+     "ttft_over_1s": 6
+    },
+    "base": {
+     "requests": 6167,
+     "ok": 6167,
+     "errors": {},
+     "ttft_over_500ms": 0.007,
+     "ttft_over_1s": 3
+    }
+   },
+   "sli": {
+    "availability_bad": 0.0,
+    "latency_bad": 0.19453,
+    "requests_per_s": 9.75742,
+    "failed_backend_attempts": 0.0,
+    "usage_events_lost": 0.0
+   },
+   "predicted_pages": {
+    "LLMGatewayAvailabilityFastBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayAvailabilitySlowBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayLatencyFastBurn": {
+     "burn_rate": 19.45,
+     "ttd_s": 222.1,
+     "ttd_traffic_s": 210.4
+    },
+    "LLMGatewayLatencySlowBurn": {
+     "burn_rate": 19.45,
+     "ttd_s": 555.2,
+     "ttd_traffic_s": 477.2
+    }
+   },
+   "alerts": [
+    {
+     "alert": "LLMGatewayLatencyFastBurn",
+     "severity": "page",
+     "ttd_s": 206.1,
+     "fired_in_prometheus_s": 206.1,
+     "episodes": 2,
+     "resolved_after_clear_s": 26.2
+    },
+    {
+     "alert": "LLMGatewayLatencySlowBurn",
+     "severity": "page",
+     "ttd_s": 486.1,
+     "fired_in_prometheus_s": 486.1,
+     "episodes": 1,
+     "resolved_after_clear_s": 126.2
+    }
+   ],
+   "pages": 2,
+   "page_outcomes": {
+    "LLMGatewayLatencyFastBurn": "hit",
+    "LLMGatewayLatencySlowBurn": "hit"
+   }
+  },
+  {
+   "id": "C2",
+   "what": "Kafka down for 2 minutes (longer than the producer's 30 s delivery timeout)",
+   "kind": "cause",
+   "inject": "2026-10-31T11:42:52.391+00:00",
+   "minutes": 2.17,
+   "client": {
+    "base": {
+     "requests": 1090,
+     "ok": 1090,
+     "errors": {},
+     "ttft_over_500ms": 0.0,
+     "ttft_over_1s": 0
+    }
+   },
+   "sli": {
+    "availability_bad": 0.0,
+    "latency_bad": 0.0,
+    "requests_per_s": 8.368,
+    "failed_backend_attempts": 0.0,
+    "usage_events_lost": 795.63983
+   },
+   "predicted_pages": {
+    "LLMGatewayAvailabilityFastBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayAvailabilitySlowBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayLatencyFastBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayLatencySlowBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    }
+   },
+   "alerts": [
+    {
+     "alert": "LLMGatewayUsageEventsLost",
+     "severity": "ticket",
+     "ttd_s": 35.4,
+     "fired_in_prometheus_s": 35.4,
+     "episodes": 1,
+     "resolved_after_clear_s": 295.1
+    }
+   ],
+   "pages": 0,
+   "page_outcomes": {}
+  },
+  {
+   "id": "C4",
+   "what": "tenant team-batch floods at 20 req/s (its limit is 60 per minute)",
+   "kind": "cause",
+   "inject": "2026-10-31T11:49:52.338+00:00",
+   "minutes": 3.0,
+   "client": {
+    "C4-noisy": {
+     "requests": 3619,
+     "ok": 478,
+     "errors": {
+      "429": 3141
+     },
+     "ttft_over_500ms": 0.0021,
+     "ttft_over_1s": 0
+    },
+    "base": {
+     "requests": 1468,
+     "ok": 1468,
+     "errors": {},
+     "ttft_over_500ms": 0.0048,
+     "ttft_over_1s": 0
+    }
+   },
+   "sli": {
+    "availability_bad": 0.0,
+    "latency_bad": 0.00372,
+    "requests_per_s": 28.16977,
+    "failed_backend_attempts": 0.0,
+    "usage_events_lost": 0.0
+   },
+   "predicted_pages": {
+    "LLMGatewayAvailabilityFastBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayAvailabilitySlowBurn": {
+     "burn_rate": 0.0,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayLatencyFastBurn": {
+     "burn_rate": 0.37,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayLatencySlowBurn": {
+     "burn_rate": 0.37,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    }
+   },
+   "alerts": [],
+   "pages": 0,
+   "page_outcomes": {}
+  },
+  {
+   "id": "A3",
+   "what": "all backends cut 5% of streams",
+   "kind": "slo",
+   "inject": "2026-10-31T11:55:52.349+00:00",
+   "minutes": 24.0,
+   "client": {
+    "base": {
+     "requests": 11509,
+     "ok": 10935,
+     "errors": {
+      "cut": 574
+     },
+     "ttft_over_500ms": 0.0001,
+     "ttft_over_1s": 0
+    }
+   },
+   "sli": {
+    "availability_bad": 0.04993,
+    "latency_bad": 9e-05,
+    "requests_per_s": 7.99721,
+    "failed_backend_attempts": 0.0,
+    "usage_events_lost": 0.0
+   },
+   "predicted_pages": {
+    "LLMGatewayAvailabilityFastBurn": {
+     "burn_rate": 9.99,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayAvailabilitySlowBurn": {
+     "burn_rate": 9.99,
+     "ttd_s": 1081.5,
+     "ttd_traffic_s": 1134.9
+    },
+    "LLMGatewayLatencyFastBurn": {
+     "burn_rate": 0.01,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    },
+    "LLMGatewayLatencySlowBurn": {
+     "burn_rate": 0.01,
+     "ttd_s": null,
+     "ttd_traffic_s": null
+    }
+   },
+   "alerts": [
+    {
+     "alert": "LLMGatewayAvailabilitySlowBurn",
+     "severity": "page",
+     "ttd_s": 1101.1,
+     "fired_in_prometheus_s": 1101.1,
+     "episodes": 1,
+     "resolved_after_clear_s": 61.2
+    }
+   ],
+   "pages": 1,
+   "page_outcomes": {
+    "LLMGatewayAvailabilitySlowBurn": "hit"
+   }
+  }
+ ],
+ "false_pages": 0,
+ "page_scorecard": {
+  "hit": 9,
+  "miss": 0,
+  "false page": 0
+ },
+ "quiet_alerts": 0
+}
