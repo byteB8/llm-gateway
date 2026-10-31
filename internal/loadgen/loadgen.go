@@ -34,9 +34,13 @@ type Config struct {
 	Seed         int64   `json:"seed"`
 	Model        string  `json:"model"`
 	Key          string  `json:"-"` // sent as a bearer token; kept out of the saved summary
+	// Rate > 0 switches to an open loop: Poisson arrivals at Rate per second for Duration.
+	Rate     float64       `json:"rate,omitempty"`
+	Duration time.Duration `json:"duration_ns,omitempty"`
 }
 
 type Result struct {
+	Start    time.Time     `json:"start"`
 	Prefix   int           `json:"prefix"`
 	Status   int           `json:"status"`
 	Prompt   int           `json:"prompt_tokens"`
@@ -74,40 +78,111 @@ type Percentiles struct {
 	Mean float64 `json:"mean"`
 }
 
-// Run sends cfg.Requests requests from cfg.Concurrency workers and summarises them. It also
-// returns every request's result, in the order the requests were issued.
+// Run sends the requests and summarises them. It also returns every request's result, in the
+// order the requests were issued.
 func Run(ctx context.Context, cfg Config) (Summary, []Result) {
 	client := &http.Client{Transport: &http.Transport{MaxIdleConnsPerHost: cfg.Concurrency + 8}}
 	prompts := makePrefixes(cfg)
+	start := time.Now()
+	var results []Result
+	if cfg.Rate > 0 {
+		results = runOpen(ctx, cfg, client, prompts)
+	} else {
+		results = runClosed(ctx, cfg, client, prompts)
+	}
+	return summarise(cfg, results, time.Since(start)), results
+}
+
+// runClosed sends cfg.Requests requests from cfg.Concurrency workers, each waiting for its
+// answer before sending the next.
+func runClosed(ctx context.Context, cfg Config, client *http.Client, prompts []string) []Result {
 	jobs := make(chan int)
 	results := make([]Result, cfg.Requests)
 	var wg sync.WaitGroup
-	start := time.Now()
 	for w := 0; w < cfg.Concurrency; w++ {
 		wg.Add(1)
 		go func(w int) {
 			defer wg.Done()
 			rng := rand.New(rand.NewSource(cfg.Seed + int64(w)))
-			var zipf *rand.Zipf
-			if cfg.Zipf > 1 && cfg.Prefixes > 1 {
-				zipf = rand.NewZipf(rng, cfg.Zipf, 1, uint64(cfg.Prefixes-1))
-			}
+			pick := chooser(cfg, rng)
 			for i := range jobs {
-				p := rng.Intn(cfg.Prefixes)
-				if zipf != nil {
-					p = int(zipf.Uint64())
-				}
+				p, sent := pick(), time.Now()
 				results[i] = one(ctx, client, cfg, prompts[p], randomWords(rng, cfg.SuffixTokens))
-				results[i].Prefix = p
+				results[i].Start, results[i].Prefix = sent, p
 			}
 		}(w)
 	}
-	for i := 0; i < cfg.Requests && ctx.Err() == nil; i++ {
-		jobs <- i
+	sent := 0
+	for ; sent < cfg.Requests && ctx.Err() == nil; sent++ {
+		jobs <- sent
 	}
 	close(jobs)
 	wg.Wait()
-	return summarise(cfg, results, time.Since(start)), results
+	return results[:sent]
+}
+
+// runOpen sends requests as a Poisson process at cfg.Rate per second for cfg.Duration. Arrivals
+// do not wait for earlier answers, so a slow server does not lower the offered load as it does in
+// a closed loop. At most cfg.Concurrency requests are in flight; an arrival that finds them all
+// busy is recorded as failed, not delayed.
+func runOpen(ctx context.Context, cfg Config, client *http.Client, prompts []string) []Result {
+	rng := rand.New(rand.NewSource(cfg.Seed))
+	pick := chooser(cfg, rng)
+	slots := make(chan struct{}, cfg.Concurrency)
+	var (
+		mu      sync.Mutex
+		results []Result
+		wg      sync.WaitGroup
+	)
+	add := func(r Result) {
+		mu.Lock()
+		results = append(results, r)
+		mu.Unlock()
+	}
+	begin := time.Now()
+	next := begin
+	timer := time.NewTimer(0)
+	defer timer.Stop()
+	for {
+		next = next.Add(time.Duration(rng.ExpFloat64() / cfg.Rate * float64(time.Second)))
+		if next.Sub(begin) > cfg.Duration {
+			break
+		}
+		timer.Reset(time.Until(next))
+		select {
+		case <-ctx.Done():
+		case <-timer.C:
+		}
+		if ctx.Err() != nil {
+			break
+		}
+		p, user := pick(), randomWords(rng, cfg.SuffixTokens)
+		select {
+		case slots <- struct{}{}:
+		default:
+			add(Result{Start: time.Now(), Prefix: p, Err: "client: too many requests in flight"})
+			continue
+		}
+		wg.Add(1)
+		go func(sent time.Time) {
+			defer func() { <-slots; wg.Done() }()
+			r := one(ctx, client, cfg, prompts[p], user)
+			r.Start, r.Prefix = sent, p
+			add(r)
+		}(time.Now())
+	}
+	wg.Wait()
+	sort.Slice(results, func(i, j int) bool { return results[i].Start.Before(results[j].Start) })
+	return results
+}
+
+// chooser picks a system prompt for each request: uniformly, or Zipf-skewed when cfg.Zipf > 1.
+func chooser(cfg Config, rng *rand.Rand) func() int {
+	if cfg.Zipf > 1 && cfg.Prefixes > 1 {
+		zipf := rand.NewZipf(rng, cfg.Zipf, 1, uint64(cfg.Prefixes-1))
+		return func() int { return int(zipf.Uint64()) }
+	}
+	return func() int { return rng.Intn(cfg.Prefixes) }
 }
 
 func one(ctx context.Context, client *http.Client, cfg Config, system, user string) Result {

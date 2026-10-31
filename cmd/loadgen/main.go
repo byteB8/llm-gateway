@@ -25,9 +25,14 @@ func main() {
 	flag.Int64Var(&c.Seed, "seed", 1, "random seed")
 	flag.StringVar(&c.Model, "model", "fake", "model name sent in the request")
 	flag.StringVar(&c.Key, "key", "", "API key sent as a bearer token")
+	flag.Float64Var(&c.Rate, "rate", 0, "open loop: requests per second, Poisson arrivals (0: closed loop of -c clients sending -n)")
+	flag.DurationVar(&c.Duration, "duration", 0, "open loop: how long to send for")
 	out := flag.String("o", "", "also write the summary to this file")
 	raw := flag.String("raw", "", "write one JSON line per request to this file")
 	flag.Parse()
+	if c.Rate > 0 && c.Duration <= 0 {
+		log.Fatal("-rate needs -duration")
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()

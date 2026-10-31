@@ -37,6 +37,25 @@ func TestPercentiles(t *testing.T) {
 	}
 }
 
+func TestOpenLoopSendsAtTheRate(t *testing.T) {
+	c := fakellm.DefaultConfig("f")
+	c.TokenInterval = time.Millisecond
+	c.PrefillPerToken = 0
+	srv := httptest.NewServer(fakellm.New(c).Handler())
+	defer srv.Close()
+
+	s, rs := Run(context.Background(), Config{URL: srv.URL, Concurrency: 16, Rate: 200, Duration: 500 * time.Millisecond,
+		Prefixes: 2, PrefixTokens: 10, SuffixTokens: 5, MaxTokens: 3, Seed: 1})
+	if s.Errors != 0 || len(rs) < 60 || len(rs) > 140 { // 100 expected; the count depends only on the seed
+		t.Fatalf("%d requests, %d errors: %v", len(rs), s.Errors, s.FirstErrors)
+	}
+	for i := 1; i < len(rs); i++ {
+		if rs[i].Start.Before(rs[i-1].Start) {
+			t.Fatal("results are not in the order they were sent")
+		}
+	}
+}
+
 func TestStreamWithoutDoneIsAnError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
