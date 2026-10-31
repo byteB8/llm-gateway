@@ -7,10 +7,10 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
 	crand "crypto/rand"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"math/rand"
 	"net/http"
 	"net/http/httptrace"
@@ -59,7 +59,7 @@ type Summary struct {
 	TTFTms       Percentiles    `json:"ttft_ms"`
 	TotalMs      Percentiles    `json:"total_ms"`
 	CacheHitRate float64        `json:"cache_hit_rate"`
-	Retries      int            `json:"retries"` // requests the HTTP client resent on a new connection
+	Retries      int            `json:"retries"`           // requests the HTTP client resent on a new connection
 	PromptTokens int            `json:"prompt_tokens"`     // over successful requests
 	OutputTokens int            `json:"completion_tokens"` // tokens streamed back
 	StatusCodes  map[int]int    `json:"status_codes"`
