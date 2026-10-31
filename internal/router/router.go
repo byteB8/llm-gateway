@@ -14,8 +14,12 @@ import (
 type Backend struct {
 	Name     string
 	URL      string
+	Capacity int64 // requests it serves at once (vLLM max_num_seqs); 0 means unknown
 	inflight atomic.Int64
 }
+
+// Full reports whether another request would have to queue on the backend.
+func (b *Backend) Full() bool { return b.Capacity > 0 && b.Inflight() >= b.Capacity }
 
 func (b *Backend) Inflight() int64 { return b.inflight.Load() }
 func (b *Backend) Acquire()        { b.inflight.Add(1) }
@@ -88,7 +92,10 @@ func (p *LeastLoaded) Order(string) []*Backend {
 // PrefixAffinity sends requests that share a prefix to the same backend, so its prefix cache
 // gets reused. It uses consistent hashing with bounded loads (Mirrokni, Thorup and Zadimoghaddam,
 // 2018): a backend whose in-flight count would exceed loadFactor times the average is skipped
-// for the next one on the ring, so a hot prefix spills over instead of queueing.
+// for the next one on the ring, so a hot prefix spills over instead of queueing. A backend that
+// is Full is skipped too, because near saturation loadFactor times the average exceeds what a
+// backend can run at once. If every backend is full, the request queues at its home backend,
+// where its prefix is cached.
 type PrefixAffinity struct {
 	backends   []*Backend
 	loadFactor float64
@@ -142,7 +149,7 @@ func (p *PrefixAffinity) Order(key string) []*Backend {
 	}
 	limit := int64(math.Ceil(p.loadFactor * float64(total+1) / float64(len(p.backends))))
 	for i, b := range walk {
-		if b.Inflight()+1 <= limit {
+		if b.Inflight()+1 <= limit && !b.Full() {
 			return append([]*Backend{b}, append(walk[:i:i], walk[i+1:]...)...)
 		}
 	}

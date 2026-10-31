@@ -18,11 +18,15 @@ func main() {
 	policy := flag.String("policy", "prefix-affinity", "round-robin | least-loaded | prefix-affinity")
 	loadFactor := flag.Float64("load-factor", 1.25, "prefix-affinity: skip a backend above this multiple of the average load")
 	attempts := flag.Int("attempts", 0, "backends tried per request (0 = all)")
+	capacity := flag.Int64("capacity", 0, "requests each backend serves at once, e.g. vLLM max_num_seqs (0 = unknown)")
 	flag.Parse()
 
 	backends, err := router.ParseBackends(*spec)
 	if err != nil {
 		log.Fatal(err)
+	}
+	for _, b := range backends {
+		b.Capacity = *capacity
 	}
 	p, err := router.New(*policy, backends, *loadFactor)
 	if err != nil {

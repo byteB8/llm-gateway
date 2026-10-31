@@ -93,3 +93,29 @@ func TestPrefixAffinitySpillsWhenOverloaded(t *testing.T) {
 		t.Fatal("key did not return home once load dropped")
 	}
 }
+
+func TestPrefixAffinitySkipsFullBackend(t *testing.T) {
+	bs := pool(4)
+	for _, b := range bs {
+		b.Capacity = 3
+	}
+	p := NewPrefixAffinity(bs, 1.25)
+	order := p.Order("hot")
+	home, spare := order[0], order[3]
+	for _, b := range bs { // home 3 (full), others 3, 3, 2: total 11, load limit ceil(1.25*12/4) = 4
+		n := 3
+		if b == spare {
+			n = 2
+		}
+		for i := 0; i < n; i++ {
+			b.Acquire()
+		}
+	}
+	if got := p.Order("hot")[0]; got != spare {
+		t.Fatalf("chose %s, want the only backend with a free slot (%s)", got.Name, spare.Name)
+	}
+	spare.Acquire() // now every backend is full: queue at home, where the prefix is cached
+	if got := p.Order("hot")[0]; got != home {
+		t.Fatalf("all full: chose %s, want home %s", got.Name, home.Name)
+	}
+}
