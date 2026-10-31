@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: meter
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: meter}}
+  template:
+    metadata: {labels: {app: meter}}
+    spec:
+      containers:
+        - name: meter
+          image: llm-gateway:dev
+          imagePullPolicy: Never
+          command: [/usr/local/bin/meter]
+          args: [-kafka-brokers=kafka:9092]
+          env:
+            - name: PG_DSN
+              valueFrom: {secretKeyRef: {name: postgres, key: dsn}}
+          resources:
+            requests: {cpu: 50m, memory: 32Mi}
+            limits: {memory: 128Mi}

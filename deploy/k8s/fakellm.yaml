@@ -1,0 +1,39 @@
+# Four fake inference servers. A StatefulSet gives each a stable DNS name
+# (fakellm-0.fakellm ... fakellm-3.fakellm), which the gateway's backend list uses.
+apiVersion: v1
+kind: Service
+metadata:
+  name: fakellm
+spec:
+  clusterIP: None
+  selector: {app: fakellm}
+  ports: [{port: 9000}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: fakellm
+spec:
+  serviceName: fakellm
+  replicas: 4
+  podManagementPolicy: Parallel
+  selector: {matchLabels: {app: fakellm}}
+  template:
+    metadata: {labels: {app: fakellm}}
+    spec:
+      containers:
+        - name: fakellm
+          image: llm-gateway:dev
+          imagePullPolicy: Never
+          command: [/usr/local/bin/fakellm]
+          args: [-listen, ":9000", -name, $(POD_NAME)]
+          env:
+            - name: POD_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+          ports: [{containerPort: 9000}]
+          readinessProbe:
+            httpGet: {path: /health, port: 9000}
+            periodSeconds: 2
+          resources:
+            requests: {cpu: 50m, memory: 32Mi}
+            limits: {memory: 128Mi}
