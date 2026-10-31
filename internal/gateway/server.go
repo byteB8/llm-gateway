@@ -71,6 +71,17 @@ func New(cfg Config, backends []*router.Backend, policy router.Policy, log *slog
 		lbl := prometheus.Labels{"backend": b.Name}
 		cfg.Metrics.GaugeFunc("llmgw_backend_inflight", "Requests in flight to the backend.", lbl, func() float64 { return float64(b.Inflight()) })
 		cfg.Metrics.GaugeFunc("llmgw_backend_capacity", "Requests the backend serves at once (0 = unknown).", lbl, func() float64 { return float64(b.Capacity) })
+		cfg.Metrics.GaugeFunc("llmgw_backend_consecutive_failures", "Attempts on the backend that failed in a row (0 once one succeeds).",
+			lbl, func() float64 { return float64(b.ConsecutiveFailures()) })
+		cfg.Metrics.GaugeFunc("llmgw_backend_ejected", "1 while the backend is ejected: tried only after the others.",
+			lbl, func() float64 {
+				if b.Ejected(time.Now()) {
+					return 1
+				}
+				return 0
+			})
+		cfg.Metrics.CounterFunc("llmgw_backend_ejections_total", "Times the backend was ejected after failing in a row.",
+			lbl, func() float64 { return float64(b.Ejections()) })
 	}
 	if k, ok := cfg.Publisher.(interface{ Stats() usage.Stats }); ok {
 		for result, f := range map[string]func(usage.Stats) int64{
@@ -213,7 +224,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	order := s.policy.Order(openai.PrefixKey(req.Messages))[:s.cfg.MaxAttempts]
+	order := router.HealthyFirst(s.policy.Order(openai.PrefixKey(req.Messages)), time.Now())[:s.cfg.MaxAttempts]
 	var lastErr string
 	for attempt, b := range order {
 		b.Acquire()
@@ -239,8 +250,12 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 			}
 			s.cfg.Metrics.BackendFailures.WithLabelValues(b.Name, reason).Inc()
 			s.log.Warn("backend failed", "backend", b.Name, "attempt", attempt+1, "err", lastErr)
+			if d := b.Failed(time.Now()); d > 0 {
+				s.log.Warn("backend ejected", "backend", b.Name, "for", d.String(), "failures_in_a_row", b.ConsecutiveFailures())
+			}
 			continue
 		}
+		b.Succeeded()
 		tap := &usageTap{stream: req.Stream}
 		ttfb, n, copyErr := s.stream(w, resp, b, attempt+1, start, tap)
 		b.Release()

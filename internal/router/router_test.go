@@ -2,7 +2,9 @@ package router
 
 import (
 	"fmt"
+	"strings"
 	"testing"
+	"time"
 )
 
 func pool(n int) []*Backend {
@@ -11,6 +13,14 @@ func pool(n int) []*Backend {
 		bs[i] = &Backend{Name: fmt.Sprintf("b%d", i), URL: fmt.Sprintf("http://b%d", i)}
 	}
 	return bs
+}
+
+func names(bs []*Backend) string {
+	out := make([]string, len(bs))
+	for i, b := range bs {
+		out[i] = b.Name
+	}
+	return strings.Join(out, " ")
 }
 
 func TestParseBackends(t *testing.T) {
@@ -117,5 +127,54 @@ func TestPrefixAffinitySkipsFullBackend(t *testing.T) {
 	spare.Acquire() // now every backend is full: queue at home, where the prefix is cached
 	if got := p.Order("hot")[0]; got != home {
 		t.Fatalf("all full: chose %s, want home %s", got.Name, home.Name)
+	}
+}
+
+func TestEjectionAfterFailuresInARow(t *testing.T) {
+	b := &Backend{Name: "a"}
+	now := time.Unix(1000, 0)
+	for i := 1; i < EjectAfter; i++ {
+		if d := b.Failed(now); d != 0 || b.Ejected(now) {
+			t.Fatalf("ejected after %d failures", i)
+		}
+	}
+	if d := b.Failed(now); d != 5*time.Second || !b.Ejected(now.Add(4*time.Second)) || b.Ejected(now.Add(6*time.Second)) {
+		t.Fatalf("first ejection %v", d)
+	}
+	if d := b.Failed(now.Add(time.Second)); d != 0 {
+		t.Fatalf("a failure while ejected extended the ejection by %v", d)
+	}
+	// Still failing when it comes back: ejected again, for longer, up to the cap.
+	at := now.Add(6 * time.Second)
+	for _, want := range []time.Duration{10 * time.Second, 20 * time.Second, 30 * time.Second, 30 * time.Second} {
+		if d := b.Failed(at); d != want {
+			t.Fatalf("ejected for %v, want %v", d, want)
+		}
+		at = at.Add(want + time.Second)
+	}
+	b.Succeeded()
+	if b.Ejected(at) || b.ConsecutiveFailures() != 0 || b.Ejections() != 5 {
+		t.Fatalf("after a success: ejected=%v failures=%d ejections=%d", b.Ejected(at), b.ConsecutiveFailures(), b.Ejections())
+	}
+	if d := b.Failed(at); d != 0 {
+		t.Fatal("one failure after a success ejected the backend")
+	}
+}
+
+func TestHealthyFirst(t *testing.T) {
+	a, b, c := &Backend{Name: "a"}, &Backend{Name: "b"}, &Backend{Name: "c"}
+	now := time.Unix(1000, 0)
+	for i := 0; i < EjectAfter; i++ {
+		a.Failed(now)
+	}
+	if got := names(HealthyFirst([]*Backend{a, b, c}, now)); got != "b c a" {
+		t.Fatalf("order %q", got)
+	}
+	for i := 0; i < EjectAfter; i++ {
+		b.Failed(now)
+		c.Failed(now)
+	}
+	if got := names(HealthyFirst([]*Backend{a, b, c}, now)); got != "a b c" { // all ejected: keep the order
+		t.Fatalf("order %q", got)
 	}
 }

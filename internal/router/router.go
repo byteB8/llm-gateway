@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync/atomic"
+	"time"
 )
 
 type Backend struct {
@@ -16,7 +17,21 @@ type Backend struct {
 	URL      string
 	Capacity int64 // requests it serves at once (vLLM max_num_seqs); 0 means unknown
 	inflight atomic.Int64
+
+	// Passive health checking (outlier ejection): EjectAfter failed attempts in a row take the
+	// backend out of first place for 5 s, doubling up to 30 s while it keeps failing. One answered
+	// request resets it.
+	failures     atomic.Int64 // attempts failed in a row
+	ejections    atomic.Int64 // ejections in a row, for the backoff
+	ejectedUntil atomic.Int64 // Unix nanoseconds
+	ejected      atomic.Int64 // ejections so far
 }
+
+const (
+	EjectAfter = 3
+	ejectFor   = 5 * time.Second
+	ejectMax   = 30 * time.Second
+)
 
 // Full reports whether another request would have to queue on the backend.
 func (b *Backend) Full() bool { return b.Capacity > 0 && b.Inflight() >= b.Capacity }
@@ -24,6 +39,56 @@ func (b *Backend) Full() bool { return b.Capacity > 0 && b.Inflight() >= b.Capac
 func (b *Backend) Inflight() int64 { return b.inflight.Load() }
 func (b *Backend) Acquire()        { b.inflight.Add(1) }
 func (b *Backend) Release()        { b.inflight.Add(-1) }
+
+// Failed records an attempt that failed before any response (no connection, or a 5xx). It returns
+// how long the backend is now ejected for, or 0 if this failure did not eject it.
+func (b *Backend) Failed(now time.Time) time.Duration {
+	until := b.ejectedUntil.Load()
+	if b.failures.Add(1) < EjectAfter || now.UnixNano() < until {
+		return 0
+	}
+	n := min(b.ejections.Add(1), 4) // 5, 10, 20, 30 s
+	d := min(ejectFor<<(n-1), ejectMax)
+	if !b.ejectedUntil.CompareAndSwap(until, now.Add(d).UnixNano()) {
+		b.ejections.Add(-1) // a concurrent failure ejected it first
+		return 0
+	}
+	b.ejected.Add(1)
+	return d
+}
+
+// Succeeded records an attempt that got a response: the backend is healthy again.
+func (b *Backend) Succeeded() {
+	if b.failures.Load() != 0 {
+		b.failures.Store(0)
+		b.ejections.Store(0)
+		b.ejectedUntil.Store(0)
+	}
+}
+
+func (b *Backend) Ejected(now time.Time) bool { return now.UnixNano() < b.ejectedUntil.Load() }
+func (b *Backend) ConsecutiveFailures() int64 { return b.failures.Load() }
+func (b *Backend) Ejections() int64           { return b.ejected.Load() }
+
+// HealthyFirst moves ejected backends to the end of order and keeps the rest in their order.
+// Ejected backends stay in the list: when every backend is ejected, trying one beats failing.
+func HealthyFirst(order []*Backend, now time.Time) []*Backend {
+	out := make([]*Backend, 0, len(order))
+	for _, b := range order {
+		if !b.Ejected(now) {
+			out = append(out, b)
+		}
+	}
+	if len(out) == len(order) {
+		return order
+	}
+	for _, b := range order {
+		if b.Ejected(now) {
+			out = append(out, b)
+		}
+	}
+	return out
+}
 
 // ParseBackends reads "name=url,name=url" (a bare url is named after its position).
 func ParseBackends(spec string) ([]*Backend, error) {

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -95,6 +96,32 @@ func TestFallsThroughDeadBackend(t *testing.T) {
 	}
 	if bs[0].Inflight() != 0 || bs[1].Inflight() != 0 {
 		t.Fatal("inflight counters leaked")
+	}
+}
+
+func TestEjectsADeadBackend(t *testing.T) {
+	dead := httptest.NewServer(http.NotFoundHandler())
+	dead.Close()
+	_, live := fake("live")
+	defer live.Close()
+	gw, bs := gatewayFor(t, "round-robin", dead.URL, live.URL)
+	defer gw.Close()
+
+	// Round-robin puts the dead backend first for every other request. Once it has failed
+	// router.EjectAfter times in a row it is ejected, and requests stop paying for it.
+	attempts := 0
+	for i := 0; i < 20; i++ {
+		resp := chat(t, gw.URL, false)
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != 200 {
+			t.Fatalf("request %d: status %d", i, resp.StatusCode)
+		}
+		n, _ := strconv.Atoi(resp.Header.Get("X-Gateway-Attempts"))
+		attempts += n - 1
+	}
+	if attempts != router.EjectAfter || !bs[0].Ejected(time.Now()) || bs[0].Ejections() != 1 {
+		t.Fatalf("%d attempts on the dead backend, ejected=%v", attempts, bs[0].Ejected(time.Now()))
 	}
 }
 
