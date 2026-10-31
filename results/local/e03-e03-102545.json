@@ -1,0 +1,16 @@
+{
+  "tenant": "e03-102545",
+  "client": {
+    "ok_requests": 626,
+    "rate_limited": 1374,
+    "prompt_tokens": 137720,
+    "completion_tokens": 10016
+  },
+  "billing": {
+    "requests": 626,
+    "prompt_tokens": 137720,
+    "completion_tokens": 10016,
+    "event_rows": 626
+  },
+  "match": true
+}
