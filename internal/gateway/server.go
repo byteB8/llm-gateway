@@ -102,7 +102,11 @@ var passHeaders = []string{"Content-Type", "Cache-Control", "X-Backend", "X-Pref
 
 func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	reqID := usage.NewRequestID()
+	// A client's Idempotency-Key becomes the request id, so a resent request is billed once.
+	reqID := r.Header.Get("Idempotency-Key")
+	if !validKey(reqID) {
+		reqID = usage.NewRequestID()
+	}
 	w.Header().Set("X-Request-Id", reqID)
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
 	if err != nil {
@@ -246,3 +250,16 @@ func writeError(w http.ResponseWriter, code int, msg string) {
 }
 
 func ms(d time.Duration) float64 { return float64(d.Microseconds()) / 1000 }
+
+// validKey accepts 8-128 printable ASCII characters without spaces.
+func validKey(k string) bool {
+	if len(k) < 8 || len(k) > 128 {
+		return false
+	}
+	for i := 0; i < len(k); i++ {
+		if k[i] <= ' ' || k[i] > '~' {
+			return false
+		}
+	}
+	return true
+}

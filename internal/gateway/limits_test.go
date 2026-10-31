@@ -165,3 +165,21 @@ func TestPublishesOneEventPerServedRequest(t *testing.T) {
 		t.Fatalf("event %+v (header id %q)", e, resp.Header.Get("X-Request-Id"))
 	}
 }
+
+func TestIdempotencyKeyBecomesRequestID(t *testing.T) {
+	gw := limitedGateway(t, limit.Limits{}, nil)
+	b, _ := json.Marshal(openai.ChatRequest{Messages: []openai.Message{{Role: "user", Content: "x"}}})
+	for key, want := range map[string]bool{"retry-key-0001": true, "short": false, "has space inside": false} {
+		req, _ := http.NewRequest(http.MethodPost, gw.URL+"/v1/chat/completions", bytes.NewReader(b))
+		req.Header.Set("Authorization", "Bearer sk-a")
+		req.Header.Set("Idempotency-Key", key)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if got := resp.Header.Get("X-Request-Id") == key; got != want {
+			t.Fatalf("key %q: request id %q", key, resp.Header.Get("X-Request-Id"))
+		}
+	}
+}
