@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/byteB8/llm-gateway/internal/openai"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type Config struct {
@@ -52,19 +54,41 @@ type Server struct {
 	slots chan struct{}
 	cache *lru
 	stats struct{ requests, hits, active, queued atomic.Int64 }
+	fault atomic.Pointer[Fault]
+	reg   *prometheus.Registry
+	m     struct {
+		promptTokens, cachedTokens prometheus.Counter
+		faults                     *prometheus.CounterVec
+	}
 }
 
 func New(cfg Config) *Server {
 	if cfg.Slots < 1 {
 		cfg.Slots = 1
 	}
-	return &Server{cfg: cfg, slots: make(chan struct{}, cfg.Slots), cache: newLRU(cfg.CacheEntries)}
+	s := &Server{cfg: cfg, slots: make(chan struct{}, cfg.Slots), cache: newLRU(cfg.CacheEntries), reg: prometheus.NewRegistry()}
+	s.m.promptTokens = prometheus.NewCounter(prometheus.CounterOpts{Name: "fakellm_prefix_cache_queries_total",
+		Help: "Prompt tokens looked up in the prefix cache (vLLM's prefix_cache_queries, for the fake)."})
+	s.m.cachedTokens = prometheus.NewCounter(prometheus.CounterOpts{Name: "fakellm_prefix_cache_hits_total",
+		Help: "Prompt tokens served from the prefix cache."})
+	s.m.faults = prometheus.NewCounterVec(prometheus.CounterOpts{Name: "fakellm_injected_faults_total",
+		Help: "Requests that hit an injected fault."}, []string{"kind"})
+	s.reg.MustRegister(s.m.promptTokens, s.m.cachedTokens, s.m.faults,
+		prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "fakellm_requests_running", Help: "Requests holding a decode slot."},
+			func() float64 { return float64(s.stats.active.Load()) }),
+		prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "fakellm_requests_waiting", Help: "Requests queued for a slot."},
+			func() float64 { return float64(s.stats.queued.Load()) }),
+		prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "fakellm_slots", Help: "Decode slots (vLLM max_num_seqs)."},
+			func() float64 { return float64(cfg.Slots) }))
+	return s
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/chat/completions", s.chat)
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok\n")) })
+	mux.HandleFunc("/fault", s.faultHandler)
+	mux.Handle("GET /metrics", promhttp.HandlerFor(s.reg, promhttp.HandlerOpts{}))
 	mux.HandleFunc("GET /stats", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(s.Stats())
@@ -97,6 +121,16 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	s.stats.active.Add(1)
 	defer s.stats.active.Add(-1)
 
+	fault := s.currentFault()
+	if chance(fault.ErrorRate) {
+		s.m.faults.WithLabelValues("error").Inc()
+		http.Error(w, "injected fault", http.StatusServiceUnavailable)
+		return
+	}
+	if !sleep(ctx, time.Duration(fault.ExtraLatencyMs)*time.Millisecond) {
+		return
+	}
+
 	prompt := openai.PromptTokens(req.Messages)
 	prefix := openai.PrefixKey(req.Messages)
 	hit := s.cache.touch(hashKey(prefix))
@@ -105,6 +139,8 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		s.stats.hits.Add(1)
 		uncached -= openai.CountTokens(prefix)
 	}
+	s.m.promptTokens.Add(float64(prompt))
+	s.m.cachedTokens.Add(float64(prompt - uncached))
 	if !sleep(ctx, time.Duration(uncached)*s.cfg.PrefillPerToken) {
 		return
 	}
@@ -158,6 +194,15 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 			d.Role = "assistant"
 		}
 		if !send(chunk(d, nil, nil)) {
+			return
+		}
+		if i == 0 && chance(fault.CutRate) {
+			s.m.faults.WithLabelValues("cut").Inc()
+			if hj, ok := w.(http.Hijacker); ok { // drop the connection like a crashed server would
+				if conn, _, err := hj.Hijack(); err == nil {
+					conn.Close()
+				}
+			}
 			return
 		}
 	}

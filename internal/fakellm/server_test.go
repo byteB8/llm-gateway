@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -104,5 +105,48 @@ func TestLRUEvictsOldest(t *testing.T) {
 	}
 	if !c.touch(3) {
 		t.Fatal("3 should still be cached")
+	}
+}
+
+func TestInjectedFaults(t *testing.T) {
+	s := New(fastConfig())
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	req := openai.ChatRequest{Messages: []openai.Message{{Role: "user", Content: "hi"}}, Stream: true, MaxTokens: 5}
+
+	if err := s.SetFault(Fault{ErrorRate: 2}); err == nil {
+		t.Fatal("rate above 1 must be rejected")
+	}
+	resp, err := http.Post(srv.URL+"/fault", "application/json", strings.NewReader(`{"error_rate": 1}`))
+	if err != nil || resp.StatusCode != 200 {
+		t.Fatalf("POST /fault: %v %v", err, resp.StatusCode)
+	}
+	resp.Body.Close()
+	if r := post(t, srv.URL, req); r.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("with error_rate 1: status %d", r.StatusCode)
+	}
+
+	s.SetFault(Fault{ExtraLatencyMs: 150})
+	start := time.Now()
+	r := post(t, srv.URL, req)
+	r.Body.Close()
+	if time.Since(start) < 150*time.Millisecond {
+		t.Fatalf("extra latency not applied: %v", time.Since(start))
+	}
+
+	s.SetFault(Fault{CutRate: 1})
+	r = post(t, srv.URL, req)
+	body, _ := io.ReadAll(r.Body)
+	r.Body.Close()
+	if strings.Contains(string(body), "[DONE]") || !strings.Contains(string(body), "tok0") {
+		t.Fatalf("cut stream should have the first token and no [DONE]: %q", body)
+	}
+
+	s.SetFault(Fault{})
+	r = post(t, srv.URL, req)
+	body, _ = io.ReadAll(r.Body)
+	r.Body.Close()
+	if !strings.Contains(string(body), "[DONE]") {
+		t.Fatal("clearing the fault should restore normal streams")
 	}
 }
