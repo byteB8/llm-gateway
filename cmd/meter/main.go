@@ -25,6 +25,7 @@ func main() {
 	brokers := flag.String("kafka-brokers", "localhost:9092", "comma-separated Kafka brokers")
 	topic := flag.String("usage-topic", "usage", "topic to consume")
 	group := flag.String("group", "meter", "consumer group")
+	crashAt := flag.Int("crash-before-commit", 0, "testing: exit after the Nth batch's database commit, before its offset commit")
 	flag.Parse()
 	dsn := os.Getenv("PG_DSN") // from the environment so the password stays out of the process list
 	if dsn == "" {
@@ -52,7 +53,7 @@ func main() {
 	defer cl.Close()
 	logger.Info("meter consuming", "topic", *topic, "group", *group)
 
-	var total, fresh, malformed int
+	var total, fresh, malformed, batches int
 	for ctx.Err() == nil {
 		fetches := cl.PollFetches(ctx)
 		if fetches.IsClientClosed() || ctx.Err() != nil {
@@ -87,6 +88,10 @@ func main() {
 			}
 			logger.Warn("database write failed; retrying", "events", len(events), "err", err, "backoff", backoff.String())
 			time.Sleep(backoff)
+		}
+		if batches++; batches == *crashAt {
+			logger.Warn("injected crash between database commit and offset commit", "batch", batches)
+			os.Exit(3)
 		}
 		if err := cl.CommitRecords(ctx, records...); err != nil {
 			logger.Warn("offset commit failed; the batch will be replayed and ignored", "err", err)
