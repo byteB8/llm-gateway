@@ -8,7 +8,13 @@ REMOTE=${REMOTE:-sustain}; DIR=${DIR:-work/llmgw}
 case "${1:-push}" in
   push)
     mkdir -p bin/linux
-    GOTOOLCHAIN=local CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o bin/linux/ ./cmd/gateway ./cmd/loadgen
+    export GOTOOLCHAIN=local CGO_ENABLED=0 GOOS=linux GOARCH=amd64
+    go build -trimpath -o bin/linux/ ./cmd/gateway ./cmd/loadgen ./cmd/fakellm ./bench/otlpsink
+    # e08 compares with the gateway as it was before metrics and tracing (the last commit without them).
+    pre=$(mktemp -d)
+    git worktree add -q --detach "$pre" 8b54d20
+    (cd "$pre" && go build -trimpath -o "$OLDPWD/bin/linux/gateway-pre" ./cmd/gateway)
+    git worktree remove --force "$pre"
     ssh "$REMOTE" "mkdir -p $DIR/bin"
     rsync -az bench/sustain/ "$REMOTE:$DIR/"
     rsync -az bin/linux/ "$REMOTE:$DIR/bin/" ;;
