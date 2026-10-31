@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/byteB8/llm-gateway/internal/limit"
 	"github.com/byteB8/llm-gateway/internal/openai"
 	"github.com/byteB8/llm-gateway/internal/router"
+	"github.com/byteB8/llm-gateway/internal/usage"
 )
 
 // limitedGateway fronts one fake backend that writes 4 tokens unless the request asks for more.
@@ -128,5 +130,38 @@ func TestNoLimitHeadersWithoutLimits(t *testing.T) {
 	}
 	if v := resp.Header.Values("X-RateLimit-Remaining-Tokens"); len(v) != 0 {
 		t.Fatalf("unexpected remaining-tokens header %v", v)
+	}
+}
+
+type capture struct {
+	mu     sync.Mutex
+	events []usage.Event
+}
+
+func (c *capture) Publish(e usage.Event) { c.mu.Lock(); c.events = append(c.events, e); c.mu.Unlock() }
+func (c *capture) Close()                {}
+
+func TestPublishesOneEventPerServedRequest(t *testing.T) {
+	c := fakellm.DefaultConfig("f")
+	c.PrefillPerToken, c.TokenInterval = 0, time.Millisecond
+	be := httptest.NewServer(fakellm.New(c).Handler())
+	defer be.Close()
+	bs := []*router.Backend{{Name: "f", URL: be.URL}}
+	p, _ := router.New("round-robin", bs, 1.25)
+	events := &capture{}
+	g := New(Config{Publisher: events}, bs, p, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	gw := httptest.NewServer(g.Handler())
+	defer gw.Close()
+
+	resp := chat(t, gw.URL, true) // 2 prompt tokens, 4 completion tokens
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if len(events.events) != 1 {
+		t.Fatalf("%d events", len(events.events))
+	}
+	e := events.events[0]
+	if e.RequestID != resp.Header.Get("X-Request-Id") || e.Tenant != "anonymous" || e.Backend != "f" ||
+		e.PromptTokens != 2 || e.CompletionTokens != 4 || !e.UsageKnown || e.Status != 200 {
+		t.Fatalf("event %+v (header id %q)", e, resp.Header.Get("X-Request-Id"))
 	}
 }

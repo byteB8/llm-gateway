@@ -17,6 +17,7 @@ import (
 	"github.com/byteB8/llm-gateway/internal/limit"
 	"github.com/byteB8/llm-gateway/internal/openai"
 	"github.com/byteB8/llm-gateway/internal/router"
+	"github.com/byteB8/llm-gateway/internal/usage"
 )
 
 type Config struct {
@@ -25,6 +26,7 @@ type Config struct {
 	Tenants               *Tenants      // nil: no authentication, everyone is "anonymous"
 	DefaultMaxTokens      int           // reserved for a request that sets no max_tokens
 	BackendKey            string        // sent to backends as a bearer token (vLLM --api-key)
+	Publisher             usage.Publisher
 }
 
 type Server struct {
@@ -45,6 +47,9 @@ func New(cfg Config, backends []*router.Backend, policy router.Policy, log *slog
 	}
 	if cfg.DefaultMaxTokens <= 0 {
 		cfg.DefaultMaxTokens = 256
+	}
+	if cfg.Publisher == nil {
+		cfg.Publisher = usage.Nop{}
 	}
 	limiter := limit.New(nil)
 	if cfg.Tenants != nil {
@@ -67,6 +72,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/chat/completions", s.chat)
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok\n")) })
 	mux.HandleFunc("GET /backends", s.listBackends)
+	mux.HandleFunc("GET /stats", func(w http.ResponseWriter, _ *http.Request) {
+		out := map[string]any{"policy": s.policy.Name()}
+		if k, ok := s.cfg.Publisher.(interface{ Stats() usage.Stats }); ok {
+			out["usage_events"] = k.Stats()
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(out)
+	})
 	return mux
 }
 
@@ -89,6 +102,8 @@ var passHeaders = []string{"Content-Type", "Cache-Control", "X-Backend", "X-Pref
 
 func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
+	reqID := usage.NewRequestID()
+	w.Header().Set("X-Request-Id", reqID)
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
 	if err != nil {
 		writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
@@ -152,12 +167,19 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 			used, prompt, completion = u.TotalTokens, u.PromptTokens, u.CompletionTokens
 		}
 		ticket.Done(used)
+		s.cfg.Publisher.Publish(usage.Event{
+			RequestID: reqID, Tenant: tenant, Backend: b.Name, Model: req.Model, Status: resp.StatusCode,
+			Stream: req.Stream, PromptTokens: prompt, CompletionTokens: completion, UsageKnown: used >= 0,
+			TTFBms: ms(ttfb), DurationMs: ms(time.Since(start)), Time: start.UTC(),
+		})
 		s.log.Info("request", "tenant", tenant, "backend", b.Name, "attempts", attempt+1, "status", resp.StatusCode,
 			"stream", req.Stream, "ttfb_ms", ms(ttfb), "dur_ms", ms(time.Since(start)), "bytes", n,
 			"prompt_tokens", prompt, "completion_tokens", completion, "client_gone", copyErr != nil)
 		return
 	}
 	ticket.Done(0)
+	s.cfg.Publisher.Publish(usage.Event{RequestID: reqID, Tenant: tenant, Model: req.Model, Status: http.StatusBadGateway,
+		Stream: req.Stream, UsageKnown: true, DurationMs: ms(time.Since(start)), Time: start.UTC()})
 	s.log.Error("all backends failed", "tried", len(order), "last", lastErr)
 	writeError(w, http.StatusBadGateway, "no backend could serve the request: "+lastErr)
 }
