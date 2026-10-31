@@ -467,6 +467,14 @@ def markdown(out):
     """The README table: one row per scenario, every number from the analysis."""
     rows = ["| Fault | Clients saw | Pages: predicted → measured | Tickets |", "|---|---|---|---|"]
     for e in out["scenarios"]:
+        extra = []
+        for src, v in e["client"].items():
+            if src == "base":
+                continue
+            if v["errors"].get("429"):
+                extra.append(f"the flooding tenant got {v['errors']['429']:,} × 429 of {v['requests']:,}")
+            elif (v["ttft_over_500ms"] or 0) >= 0.005:
+                extra.append(f"the new client: {v['ttft_over_500ms']:.0%} of its first tokens > 500 ms")
         c = e["client"].get("base", {})
         seen = []
         if c:
@@ -476,10 +484,10 @@ def markdown(out):
             seen.append(f"{other} errors" if other else "")
             slow = c["ttft_over_500ms"] or 0
             seen.append(f"{slow:.0%} of first tokens > 500 ms" if slow >= 0.005 else "")
-        for src, v in e["client"].items():
-            if src != "base" and v["errors"].get("429"):
-                seen.append(f"the flooding tenant got {v['errors']['429']:,} × 429")
-        seen = "; ".join(x for x in seen if x) or "no errors"
+        seen = "; ".join(x for x in seen if x)
+        if extra:
+            seen = "; ".join(extra + ([f"everyone else: {seen}"] if seen else []))
+        seen = seen or "no errors"
         pages = []
         for f in e["alerts"]:
             if f["severity"] != "page" or "ttd_s" not in f:
