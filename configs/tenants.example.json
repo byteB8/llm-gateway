@@ -1,0 +1,6 @@
+{
+  "tenants": [
+    {"name": "team-search", "keys": ["sk-search-dev"], "limits": {"rpm": 600, "tpm": 200000, "max_concurrent": 32}},
+    {"name": "team-batch",  "keys": ["sk-batch-dev"],  "limits": {"rpm": 60,  "tpm": 50000,  "max_concurrent": 4}}
+  ]
+}
