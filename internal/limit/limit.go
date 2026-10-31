@@ -17,6 +17,7 @@ type Limits struct {
 
 // Decision explains a rejection. RetryAfter is how long until the request could be admitted if
 // nothing else happened; it is zero for the concurrency limit, which frees up on its own.
+// Remaining* are -1 when the tenant has no such limit or the value was not computed.
 type Decision struct {
 	Allowed         bool
 	Reason          string // "rpm", "tpm", "concurrency" or "too_large"
@@ -97,26 +98,27 @@ func (l *Limiter) Admit(tenant string, cost int) (*Ticket, Decision) {
 	defer l.mu.Unlock()
 	st := l.tenants[tenant]
 	if st == nil {
-		return &Ticket{l: l, tenant: tenant}, Decision{Allowed: true}
+		return &Ticket{l: l, tenant: tenant}, Decision{Allowed: true, RemainingTokens: -1, RemainingReqs: -1}
 	}
 	now := l.now()
 	d := Decision{Allowed: true, RemainingTokens: -1, RemainingReqs: -1}
 	if st.limits.MaxConcurrent > 0 && st.inflight >= st.limits.MaxConcurrent {
-		return nil, Decision{Reason: "concurrency"}
+		return nil, Decision{Reason: "concurrency", RemainingTokens: -1, RemainingReqs: -1}
 	}
 	if st.reqs != nil {
 		st.reqs.refill(now)
 		if w := st.reqs.wait(1); w > 0 {
-			return nil, Decision{Reason: "rpm", RetryAfter: w, RemainingReqs: st.reqs.level}
+			return nil, Decision{Reason: "rpm", RetryAfter: w, RemainingReqs: st.reqs.level, RemainingTokens: -1}
 		}
 	}
 	if st.tokens != nil {
 		st.tokens.refill(now)
 		if float64(cost) > st.tokens.rate*60 {
-			return nil, Decision{Reason: "too_large"} // more than a full minute of tokens: never fits
+			// more than a full minute of tokens: it can never fit
+			return nil, Decision{Reason: "too_large", RemainingTokens: st.tokens.level, RemainingReqs: -1}
 		}
 		if w := st.tokens.wait(float64(cost)); w > 0 {
-			return nil, Decision{Reason: "tpm", RetryAfter: w, RemainingTokens: st.tokens.level}
+			return nil, Decision{Reason: "tpm", RetryAfter: w, RemainingTokens: st.tokens.level, RemainingReqs: -1}
 		}
 		st.tokens.level -= float64(cost)
 		d.RemainingTokens = st.tokens.level

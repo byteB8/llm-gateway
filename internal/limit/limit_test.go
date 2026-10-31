@@ -66,7 +66,7 @@ func TestConcurrencyLimit(t *testing.T) {
 	l.Set("a", Limits{MaxConcurrent: 2})
 	t1, _ := l.Admit("a", 0)
 	l.Admit("a", 0)
-	if _, d := l.Admit("a", 0); d.Reason != "concurrency" {
+	if _, d := l.Admit("a", 0); d.Reason != "concurrency" || d.RemainingTokens != -1 {
 		t.Fatalf("third concurrent request: %+v", d)
 	}
 	t1.Done(0)
@@ -100,8 +100,8 @@ func TestTooLargeAndUnknownTenant(t *testing.T) {
 		t.Fatalf("%+v", d)
 	}
 	tk, d := l.Admit("nobody", 1_000_000)
-	if !d.Allowed {
-		t.Fatal("unknown tenants are unlimited")
+	if !d.Allowed || d.RemainingTokens != -1 || d.RemainingReqs != -1 {
+		t.Fatalf("unknown tenants are unlimited and report no remaining counts: %+v", d)
 	}
 	l.Set("nobody", Limits{MaxConcurrent: 1})
 	tk.Done(0) // admitted before limits existed: must not free a slot it never took

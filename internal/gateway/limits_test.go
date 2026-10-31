@@ -119,3 +119,14 @@ func TestUsageTapAcrossSplitWrites(t *testing.T) {
 		t.Fatalf("non-stream usage %+v", u)
 	}
 }
+
+func TestNoLimitHeadersWithoutLimits(t *testing.T) {
+	gw := limitedGateway(t, limit.Limits{}, nil) // tenant exists but has no limits
+	resp := call(t, gw.URL, "sk-a")
+	if v := resp.Header.Values("X-RateLimit-Remaining-Requests"); len(v) != 0 {
+		t.Fatalf("unexpected remaining-requests header %v", v)
+	}
+	if v := resp.Header.Values("X-RateLimit-Remaining-Tokens"); len(v) != 0 {
+		t.Fatalf("unexpected remaining-tokens header %v", v)
+	}
+}
