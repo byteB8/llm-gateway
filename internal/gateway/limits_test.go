@@ -166,20 +166,41 @@ func TestPublishesOneEventPerServedRequest(t *testing.T) {
 	}
 }
 
-func TestIdempotencyKeyBecomesRequestID(t *testing.T) {
-	gw := limitedGateway(t, limit.Limits{}, nil)
-	b, _ := json.Marshal(openai.ChatRequest{Messages: []openai.Message{{Role: "user", Content: "x"}}})
-	for key, want := range map[string]bool{"retry-key-0001": true, "short": false, "has space inside": false} {
+func TestIdempotencyKeyIsRecordedNotBilledOn(t *testing.T) {
+	c := fakellm.DefaultConfig("f")
+	c.PrefillPerToken, c.TokenInterval = 0, time.Millisecond
+	be := httptest.NewServer(fakellm.New(c).Handler())
+	defer be.Close()
+	bs := []*router.Backend{{Name: "f", URL: be.URL}}
+	p, _ := router.New("round-robin", bs, 1.25)
+	events := &capture{}
+	gw := httptest.NewServer(New(Config{Publisher: events}, bs, p, slog.New(slog.NewTextHandler(io.Discard, nil))).Handler())
+	defer gw.Close()
+
+	// One key reused for two different prompts must give two bills, and an invalid key is not recorded.
+	send := func(key, content string) string {
+		b, _ := json.Marshal(openai.ChatRequest{Messages: []openai.Message{{Role: "user", Content: content}}, MaxTokens: 2})
 		req, _ := http.NewRequest(http.MethodPost, gw.URL+"/v1/chat/completions", bytes.NewReader(b))
-		req.Header.Set("Authorization", "Bearer sk-a")
 		req.Header.Set("Idempotency-Key", key)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}
+		io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
-		if got := resp.Header.Get("X-Request-Id") == key; got != want {
-			t.Fatalf("key %q: request id %q", key, resp.Header.Get("X-Request-Id"))
+		return resp.Header.Get("X-Request-Id")
+	}
+	ids := []string{send("reused-key-0001", "first prompt"), send("reused-key-0001", "a different prompt"), send("short", "x")}
+	if len(events.events) != 3 {
+		t.Fatalf("%d events", len(events.events))
+	}
+	for i, want := range []string{"reused-key-0001", "reused-key-0001", ""} {
+		e := events.events[i]
+		if e.RequestID != ids[i] || e.IdempotencyKey != want {
+			t.Fatalf("event %d: request id %q (header %q), key %q", i, e.RequestID, ids[i], e.IdempotencyKey)
 		}
+	}
+	if ids[0] == ids[1] {
+		t.Fatal("two requests with the same Idempotency-Key share one billing id: the second would not be billed")
 	}
 }

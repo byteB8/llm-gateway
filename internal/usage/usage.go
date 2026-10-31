@@ -20,6 +20,7 @@ import (
 
 type Event struct {
 	RequestID        string    `json:"request_id"`
+	IdempotencyKey   string    `json:"idempotency_key,omitempty"` // the client's, recorded for audit; billing never trusts it
 	Tenant           string    `json:"tenant"`
 	Backend          string    `json:"backend"`
 	Model            string    `json:"model"`
@@ -36,7 +37,7 @@ type Event struct {
 	Trace map[string]string `json:"-"`
 }
 
-// NewRequestID returns 16 random bytes in hex; it is the idempotency key downstream.
+// NewRequestID returns 16 random bytes in hex: the event id the meter deduplicates on.
 func NewRequestID() string {
 	b := make([]byte, 16)
 	rand.Read(b)

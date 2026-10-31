@@ -185,12 +185,15 @@ var passHeaders = []string{"Content-Type", "Cache-Control", "X-Backend", "X-Pref
 
 func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	// A client's Idempotency-Key becomes the request id, so a resent request is billed once.
-	reqID := r.Header.Get("Idempotency-Key")
-	if !validKey(reqID) {
-		reqID = usage.NewRequestID()
-	}
+	// Every served request gets its own id, the key billing deduplicates on: Kafka's replays of one
+	// event are ignored, but two requests are two bills. The client's Idempotency-Key is only recorded.
+	// (When it was the id, a client could reuse one key for many requests and pay once.)
+	reqID := usage.NewRequestID()
 	w.Header().Set("X-Request-Id", reqID)
+	idemKey := r.Header.Get("Idempotency-Key")
+	if !validKey(idemKey) {
+		idemKey = ""
+	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
 	if err != nil {
 		s.count("unknown", "none", http.StatusRequestEntityTooLarge)
@@ -301,7 +304,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 			attribute.Int("gen_ai.usage.output_tokens", completion))
 		s.cfg.Publisher.Publish(usage.Event{
 			Trace:     tracing.Inject(r.Context()),
-			RequestID: reqID, Tenant: tenant, Backend: b.Name, Model: req.Model, Status: resp.StatusCode,
+			RequestID: reqID, IdempotencyKey: idemKey, Tenant: tenant, Backend: b.Name, Model: req.Model, Status: resp.StatusCode,
 			Stream: req.Stream, PromptTokens: prompt, CompletionTokens: completion, UsageKnown: used >= 0,
 			TTFBms: ms(ttfb), DurationMs: ms(time.Since(start)), Time: start.UTC(),
 		})
@@ -319,7 +322,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	ticket.Done(0)
 	s.count(tenant, "none", http.StatusBadGateway)
-	s.cfg.Publisher.Publish(usage.Event{RequestID: reqID, Tenant: tenant, Model: req.Model, Status: http.StatusBadGateway,
+	s.cfg.Publisher.Publish(usage.Event{RequestID: reqID, IdempotencyKey: idemKey, Tenant: tenant, Model: req.Model, Status: http.StatusBadGateway,
 		Stream: req.Stream, UsageKnown: true, DurationMs: ms(time.Since(start)), Time: start.UTC()})
 	s.log.Error("all backends failed", "tried", len(order), "last", lastErr)
 	writeError(w, http.StatusBadGateway, "no backend could serve the request: "+lastErr)

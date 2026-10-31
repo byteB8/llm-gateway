@@ -17,6 +17,7 @@ import (
 const Schema = `
 CREATE TABLE IF NOT EXISTS usage_events (
 	request_id        TEXT PRIMARY KEY,
+	idempotency_key   TEXT,
 	tenant            TEXT        NOT NULL,
 	backend           TEXT        NOT NULL,
 	model             TEXT        NOT NULL,
@@ -27,6 +28,7 @@ CREATE TABLE IF NOT EXISTS usage_events (
 	ts                TIMESTAMPTZ NOT NULL,
 	inserted_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
 CREATE TABLE IF NOT EXISTS usage_daily (
 	tenant            TEXT   NOT NULL,
 	day               DATE   NOT NULL,
@@ -40,8 +42,9 @@ CREATE TABLE IF NOT EXISTS usage_daily (
 // Days are UTC dates. Rows affected is 1 for a new event and 0 for a replayed one.
 const apply = `
 WITH ins AS (
-	INSERT INTO usage_events (request_id, tenant, backend, model, status, prompt_tokens, completion_tokens, usage_known, ts)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	INSERT INTO usage_events (request_id, tenant, backend, model, status, prompt_tokens, completion_tokens, usage_known, ts,
+		idempotency_key)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, ''))
 	ON CONFLICT (request_id) DO NOTHING
 	RETURNING tenant, (ts AT TIME ZONE 'UTC')::date AS day, prompt_tokens, completion_tokens
 )
@@ -78,7 +81,8 @@ func (s *Store) Apply(ctx context.Context, events []usage.Event) (int, error) {
 
 	b := &pgx.Batch{}
 	for _, e := range events {
-		b.Queue(apply, e.RequestID, e.Tenant, e.Backend, e.Model, e.Status, e.PromptTokens, e.CompletionTokens, e.UsageKnown, e.Time)
+		b.Queue(apply, e.RequestID, e.Tenant, e.Backend, e.Model, e.Status, e.PromptTokens, e.CompletionTokens, e.UsageKnown, e.Time,
+			e.IdempotencyKey)
 	}
 	br := tx.SendBatch(ctx, b)
 	inserted := 0
