@@ -1,0 +1,6 @@
+# kubectl apply -k deploy/observability   (after the two Helm charts are installed: it uses their CRDs)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - otel-collector.yaml
+  - podmonitors.yaml

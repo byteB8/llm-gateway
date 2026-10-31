@@ -1,0 +1,44 @@
+# helm upgrade --install kps prometheus-community/kube-prometheus-stack --version 92.16.1 \
+#   -n observability --create-namespace -f deploy/observability/kube-prometheus-stack.values.yaml
+fullnameOverride: kps
+# kind runs these on localhost inside the node; scraping them only produces "target down" noise.
+kubeEtcd: {enabled: false}
+kubeControllerManager: {enabled: false}
+kubeScheduler: {enabled: false}
+kubeProxy: {enabled: false}
+
+prometheus:
+  service: {type: NodePort, nodePort: 30090}
+  prometheusSpec:
+    scrapeInterval: 5s        # fast, so alert experiments are short
+    evaluationInterval: 5s
+    retention: 2d
+    enableFeatures: [exemplar-storage]
+    # Pick up the PodMonitors and PrometheusRules from this repo, not only the chart's own.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    resources:
+      requests: {cpu: 100m, memory: 400Mi}
+      limits: {memory: 1Gi}
+
+grafana:
+  adminPassword: admin  # local laptop cluster only
+  service: {type: NodePort, nodePort: 30300}
+  sidecar:
+    dashboards: {enabled: true, label: grafana_dashboard, labelValue: "1", searchNamespace: ALL}
+    datasources:
+      # A trace_id exemplar on a Prometheus series links straight to the trace in Tempo.
+      exemplarTraceIdDestinations: {datasourceUid: tempo, traceIdLabelName: trace_id, urlDisplayLabel: View trace}
+  additionalDataSources:
+    - name: Tempo
+      type: tempo
+      uid: tempo
+      url: http://tempo.observability.svc:3200  # Tempo 2.x serves its HTTP API on 3200
+      access: proxy
+      jsonData:
+        nodeGraph: {enabled: true}
+        serviceMap: {datasourceUid: prometheus}
+
+alertmanager:
+  service: {type: NodePort, nodePort: 30093}

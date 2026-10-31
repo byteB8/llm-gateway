@@ -30,7 +30,8 @@ spec:
           env:
             - name: POD_NAME
               valueFrom: {fieldRef: {fieldPath: metadata.name}}
-          ports: [{containerPort: 9000}]
+            - {name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otel-collector.observability.svc:4318"}
+          ports: [{containerPort: 9000, name: http}]
           readinessProbe:
             httpGet: {path: /health, port: 9000}
             periodSeconds: 2

@@ -1,0 +1,21 @@
+# Prometheus scrapes the pods directly (the metrics ports are not part of the public Services).
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata: {name: gateway, namespace: llmgw}
+spec:
+  selector: {matchLabels: {app: gateway}}
+  podMetricsEndpoints: [{port: admin, path: /metrics, interval: 5s}]
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata: {name: meter, namespace: llmgw}
+spec:
+  selector: {matchLabels: {app: meter}}
+  podMetricsEndpoints: [{port: metrics, path: /metrics, interval: 5s}]
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata: {name: fakellm, namespace: llmgw}
+spec:
+  selector: {matchLabels: {app: fakellm}}
+  podMetricsEndpoints: [{port: http, path: /metrics, interval: 5s}]

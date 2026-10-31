@@ -44,7 +44,8 @@ spec:
             - -tenants=/etc/llmgw/tenants.json
             - -kafka-brokers=kafka:9092
             - -drain=25s
-          ports: [{containerPort: 8080}, {containerPort: 8081, name: admin}]
+            - -otlp-endpoint=http://otel-collector.observability.svc:4318
+          ports: [{containerPort: 8080, name: http}, {containerPort: 8081, name: admin}]
           readinessProbe:
             httpGet: {path: /health, port: 8080}
             periodSeconds: 2

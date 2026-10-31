@@ -1,0 +1,9 @@
+# helm upgrade --install tempo grafana/tempo --version 1.24.4 -n observability -f deploy/observability/tempo.values.yaml
+tempo:
+  retention: 24h
+  receivers:
+    otlp:
+      protocols:
+        grpc: {endpoint: "0.0.0.0:4317"}
+        http: {endpoint: "0.0.0.0:4318"}
+persistence: {enabled: false}
