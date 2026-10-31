@@ -24,6 +24,11 @@ alerts**, all as code and tested by injecting faults.
 - **0 of 3,000 requests failed** across two rolling restarts under load (108 without draining).
 - **Billing exact to the token** through an injected consumer crash, and through Kafka and Postgres
   outages under load.
+- **SLO alerts tested by injecting 11 faults under load**: all 9 expected pages fired close to the
+  predicted time, none was missed, nothing paged falsely, and the failures users never saw (a crashed
+  backend, a 503-ing one, Postgres down, Kafka down) opened tickets instead.
+- **Observability costs +7.5% CPU per request for metrics, +20.5% exporting every trace**, and +0.08 ms
+  of median time to first token.
 
 ## Architecture
 
@@ -129,6 +134,16 @@ records behind, or the meter not reporting.
 **Dashboards** are generated too (`scripts/dashboards.py`): burn rates per window against the thresholds,
 traffic and errors, latency with exemplars, backends, tenants, and the billing pipeline.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/grafana-e07-dark.png">
+  <img alt="The Grafana dashboard over the 2 h 17 min fault experiment: burn rates per window, traffic, errors and latency" src="docs/figures/grafana-e07-light.png">
+</picture>
+
+The dashboard over the whole fault experiment below: three availability faults (left) and two latency
+faults (right) rise through the page thresholds. At the far left the 30-minute window still holds an
+earlier test's errors, but the short windows are clean, so nothing paged: that is what the short window
+of each alert is for.
+
 ## Results
 
 ### Prefix-aware routing on real GPUs
@@ -195,6 +210,100 @@ the Service, so outside clients cannot trigger a drain.
 | Kafka down 30 s, then Postgres down 30 s, under load | 2,400 requests · 2,520,000 + 153,600 tokens, 0 errors | 2,400 requests · 2,520,000 + 153,600 tokens |
 
 Tokens are prompt + completion. Rate-limited requests are not billed.
+
+### Do the alerts work? Faults injected under load
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/detect-dark.svg">
+  <img alt="Predicted against measured time from fault to page for every page in the fault experiment" src="docs/figures/detect-light.svg">
+</picture>
+
+`scripts/e07_alerts.py` injected eleven faults, one at a time, into the kind deployment while requests
+arrived at 8 per second (an open loop: arrivals never wait for answers, so a slow server cannot slow the
+load), and recorded when each alert reached Alertmanager's webhook. Trials of the same SLO started at
+least 30 minutes apart, so each began with a clean error budget. A page's predicted time is when the
+long window's error ratio crosses the alert's threshold, given the error ratio and the traffic that
+Prometheus measured during the fault.
+
+| Fault | Clients saw | Pages: predicted → measured | Tickets |
+|---|---|---|---|
+| None (normal traffic), 30 min | no errors | none | none |
+| All backends cut 50% of streams, 4 min | 50% of streams cut | fast 42 s → **46 s** · slow 104 s → **116 s** | none |
+| One backend 1 s slower to first token, 14 min | 21% of first tokens > 500 ms | fast 3.5 min → **3.7 min** · slow 8.7 min → **8.8 min** | none |
+| One backend down, 3 min | 3% of first tokens > 500 ms | none | backend failing 40 s |
+| One backend answers 503, 3 min | 4% of first tokens > 500 ms | none | backend failing 40 s |
+| Postgres down, 3 min | no errors | none | billing lag 2.2 min |
+| All backends cut 10% of streams, 12 min | 10% of streams cut | fast 3.8 min → **4.4 min** (flapped) · slow 9.5 min → **9.6 min** | none |
+| New client: 2 req/s of 3,000-token prompts, 13 min | the new client: 99% of its first tokens > 500 ms; everyone else: 1% of first tokens > 500 ms | fast 3.5 min → **3.4 min** (flapped) · slow 8.0 min → **8.1 min** | none |
+| Kafka down (past the 30 s delivery timeout), 2 min | no errors | none | usage events lost 35 s (796 events lost) |
+| A tenant floods at 20 req/s (limit 60/min), 3 min | the flooding tenant got 3,141 × 429 of 3,619 | none | none |
+| All backends cut 5% of streams, 24 min | 5% of streams cut | slow 18.9 min → **18.4 min** · no fast page: burn 10.0× < 14.4× | none |
+
+**9 of 9 expected pages fired, none was missed, and nothing paged outside the SLO faults.**
+Apart from one flapping page, every page fired between 34 s early and 12 s late: a scrape and a rule
+evaluation (5 s each) on top of the prediction, and the sampling noise of the error ratio itself (5% of
+streams cut for 18 minutes is 430 ± 21 cut streams, ±5% on the crossing time). Three trials show the
+method's edges:
+- **Near the threshold, the fast page is late and flaps.** At 19× burn (10% of streams cut), 1.3× above
+  the 14.4× threshold, it fired 40 s late and three times. The compressed 30 s confirmation window holds
+  only ~240 requests, so a 10% error ratio dips under 7.2% by chance; at full scale that window is
+  5 minutes, about 2,400 requests.
+- **Faults change traffic.** The client with 3,000-token prompts also added 22% more requests, which
+  fills the long window faster: ignoring that, the prediction would have been 7–14% late.
+- **Slow burns need the second alert.** With 5% of streams cut (10.0× burn) the fast alert, at
+  14.4×, never fires; the slow one paged after 18.4 minutes (predicted 18.9).
+
+Failures that users never saw opened tickets, not pages: a crashed backend, a backend answering 503,
+Postgres down, Kafka down. A tenant flooding past its limit got 429s and fired nothing: 4xx are the
+client's own errors, not the service's.
+
+### What the fault experiments found
+
+1. **Silently truncated answers.** When a backend died after the first token, the gateway ended the
+   response normally, and the client got a clean 200 with half an answer. It now aborts the connection,
+   as `httputil.ReverseProxy` does, so the client sees an error.
+2. **A broken backend attracts traffic.** A backend that fails fast holds no requests, so it looks idle
+   to load-aware routing: while one backend answered every request with 503, 48% of requests tried it
+   first (its usual share was about 30%). Outlier ejection, below, fixes this as well.
+3. **A dead backend stalls every request sent to it.** For 30 s CoreDNS still returns the deleted pod's
+   address and each attempt waits out the 2 s dial timeout; after that, each lookup takes ~1.2 s to say
+   "no such host", because the name walks the pod's `ndots:5` search list out to the upstream DNS.
+   **Outlier ejection** fixes it: after three failures in a row a backend is tried last, for 5 s,
+   doubling up to 30 s while it keeps failing. Fully qualified backend names
+   (`fakellm-3.fakellm.llmgw.svc.cluster.local.`), which CoreDNS answers by itself, were tried on top:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/trace-dead-backend-dark.png">
+  <img alt="A trace: the first attempt spends 1.2 s failing to resolve the dead backend's name, then another backend serves the request" src="docs/figures/trace-dead-backend-light.png">
+</picture>
+
+One request from Tempo, during the outage: 1.2 s lost on "no such host" for the dead backend, then
+fakellm-0 served it.
+
+| Fault (3 min) | Build | Failed attempts | Requests stalled > 1 s | First tokens > 500 ms | Ticket after |
+|---|---|---|---|---|---|
+| Backend down | no ejection (e07) | 444 | 24 | 3.1% | 40 s |
+| Backend down | outlier ejection | 18 | 3 | 1.7% | 38 s |
+| Backend down | ejection + fully qualified names | 14 | 9 | 2.2% | 34 s |
+| Backend answers 503 | no ejection (e07) | 692 | 12 | 3.5% | 40 s |
+| Backend answers 503 | outlier ejection | 19 | 5 | 2.3% | 38 s |
+| Backend answers 503 | ejection + fully qualified names | 14 | 8 | 2.7% | 34 s |
+
+Ejection cut the attempts wasted on the broken backend by 96–97% and removed the 2-second stalls of the
+first 30 seconds; the ticket still fired, a little sooner. The fully qualified names made no measurable
+difference on top: with the backend ejected, too few lookups fail for their cost to show above run-to-run
+noise. What is left, 1.7–2.7% of first tokens over 500 ms, is the price of serving on three backends
+instead of four, with the lost backend's prompts now cache misses elsewhere.
+
+4. **The fix would have silenced an alert.** With ejection, a dead backend gets one probe every 5–30 s,
+   so an alert on its failure rate stops firing. The backend alert now fires on state instead: every
+   attempt failed, for 30 s.
+5. **A PromQL precedence bug.** `a + b or vector(0)` means `(a + b) or vector(0)`, and `a + b` is empty
+   while either side has no series yet: each kind of failure was invisible until the other kind had
+   happened once. Caught in review before the first run, and now a promtool regression test.
+6. **Kafka down for 2 minutes lost 796 usage events**, those older than the producer's 30 s delivery
+   timeout. Serving did not notice, and the "usage events lost" ticket fired after 35 s, but the
+   events are gone. A longer timeout would trade memory for durability.
 
 ### What observability costs
 
@@ -288,8 +397,11 @@ scripts/obs_up.sh    # cluster, app, kube-prometheus-stack, Tempo, collector, ru
 
 - Rate limits are per gateway replica; with N replicas a tenant gets up to N× its limit. A shared store
   would fix that.
-- Kafka outages longer than the producer's 30 s delivery timeout, or more than 10,000 buffered events,
-  lose usage events. The loss is counted in `GET /stats`, not recovered.
+- When Kafka is down, usage events older than the producer's 30 s delivery timeout are lost (796 in a
+  2-minute outage), as are events beyond the 10,000-event buffer. The loss is counted and alerted on, not
+  recovered.
+- Outlier ejection reacts to failures, not to slowness: a backend that answered 1 s late still got 21%
+  of the traffic.
 - Least-loaded herds (above); power-of-two-choices or a random tie-break would likely fix it. Not tried.
 - Kafka and Postgres run as single instances in the manifests; this is a laptop setup, not a production one.
 - The SLO windows are compressed 12× for the experiments; `COMPRESSION = 1` in `scripts/slo_rules.py` gives
