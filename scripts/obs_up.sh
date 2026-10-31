@@ -23,7 +23,7 @@ if [ "$before" != "$(docker image inspect -f '{{.Id}}' llm-gateway:dev)" ]; then
 fi
 kubectl -n llmgw wait --for=condition=Ready pod --all --timeout=600s >/dev/null
 kubectl -n observability wait --for=condition=Ready pod --all --timeout=600s >/dev/null
-echo "Grafana      http://127.0.0.1:3000  (admin / admin)"
+echo "Grafana      http://127.0.0.1:3000  (admin / admin, dashboard \"LLM Gateway\")"
 echo "Prometheus   http://127.0.0.1:9090"
 echo "Alertmanager http://127.0.0.1:9093"
 echo "Gateway      http://127.0.0.1:8080"
