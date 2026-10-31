@@ -18,6 +18,8 @@ import (
 	"github.com/byteB8/llm-gateway/internal/openai"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Config struct {
@@ -109,6 +111,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	s.stats.requests.Add(1)
 	ctx := r.Context()
 
+	queuedAt := time.Now()
 	s.stats.queued.Add(1)
 	select {
 	case s.slots <- struct{}{}:
@@ -141,6 +144,9 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	s.m.promptTokens.Add(float64(prompt))
 	s.m.cachedTokens.Add(float64(prompt - uncached))
+	trace.SpanFromContext(ctx).SetAttributes(attribute.Bool("fakellm.prefix_cache_hit", hit),
+		attribute.Int("fakellm.prompt_tokens", prompt), attribute.Int("fakellm.uncached_tokens", uncached),
+		attribute.Float64("fakellm.queued_ms", float64(time.Since(queuedAt).Microseconds())/1000))
 	if !sleep(ctx, time.Duration(uncached)*s.cfg.PrefillPerToken) {
 		return
 	}

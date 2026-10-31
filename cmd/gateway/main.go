@@ -17,10 +17,12 @@ import (
 	"github.com/byteB8/llm-gateway/internal/gateway"
 	"github.com/byteB8/llm-gateway/internal/metrics"
 	"github.com/byteB8/llm-gateway/internal/router"
+	"github.com/byteB8/llm-gateway/internal/tracing"
 	"github.com/byteB8/llm-gateway/internal/usage"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func main() {
@@ -37,6 +39,8 @@ func main() {
 	partitions := flag.Int("usage-partitions", 4, "partitions if the topic has to be created")
 	buffered := flag.Int("usage-buffer", 10000, "usage events held in memory before new ones are dropped")
 	drain := flag.Duration("drain", 30*time.Second, "on SIGTERM, wait this long for open streams to finish")
+	otlp := flag.String("otlp-endpoint", os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"), "OTLP/HTTP collector URL for traces (empty = tracing off)")
+	sample := flag.Float64("trace-sample", 1.0, "share of new traces to sample")
 	admin := flag.String("admin-listen", ":8081", "admin address for GET /metrics and GET /drain (the preStop hook); keep it off the public Service")
 	notice := flag.Duration("drain-notice", 5*time.Second, "how long GET /drain keeps serving with Connection: close before returning")
 	flag.Parse()
@@ -59,6 +63,10 @@ func main() {
 		}
 	}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	shutdownTracing, err := tracing.Setup(context.Background(), "gateway", *otlp, *sample)
+	if err != nil {
+		log.Fatalf("tracing: %v", err)
+	}
 
 	var pub usage.Publisher = usage.Nop{}
 	if *brokers != "" {
@@ -96,7 +104,11 @@ func main() {
 		Metrics:          metrics.NewGateway(reg),
 	}, backends, p, logger)
 
-	srv := &http.Server{Addr: *addr, Handler: g.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	// A server span per chat request; health checks are not traced.
+	traced := otelhttp.NewHandler(g.Handler(), "gateway", otelhttp.WithFilter(func(r *http.Request) bool {
+		return r.URL.Path == "/v1/chat/completions"
+	}))
+	srv := &http.Server{Addr: *addr, Handler: traced, ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		logger.Info("gateway listening", "addr", *addr, "policy", p.Name(), "backends", len(backends), "kafka", *brokers != "")
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -134,5 +146,6 @@ func main() {
 		logger.Warn("drain timed out; open streams were cut", "err", err)
 	}
 	pub.Close()
+	shutdownTracing(context.Background()) // flush buffered spans
 	logger.Info("stopped")
 }

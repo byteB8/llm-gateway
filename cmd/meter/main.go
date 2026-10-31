@@ -21,10 +21,15 @@ import (
 
 	"github.com/byteB8/llm-gateway/internal/meter"
 	"github.com/byteB8/llm-gateway/internal/metrics"
+	"github.com/byteB8/llm-gateway/internal/tracing"
 	"github.com/byteB8/llm-gateway/internal/usage"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func main() {
@@ -33,12 +38,18 @@ func main() {
 	group := flag.String("group", "meter", "consumer group")
 	crashAt := flag.Int("crash-before-commit", 0, "testing: exit after the Nth batch's database commit, before its offset commit")
 	metricsAddr := flag.String("metrics-listen", ":9090", "address for GET /metrics")
+	otlp := flag.String("otlp-endpoint", os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"), "OTLP/HTTP collector URL for traces (empty = tracing off)")
 	flag.Parse()
 	dsn := os.Getenv("PG_DSN") // from the environment so the password stays out of the process list
 	if dsn == "" {
 		log.Fatal("PG_DSN is not set")
 	}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	shutdownTracing, err := tracing.Setup(context.Background(), "meter", *otlp, 1.0)
+	if err != nil {
+		log.Fatalf("tracing: %v", err)
+	}
+	defer shutdownTracing(context.Background())
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	mm := metrics.NewMeter(reg)
@@ -94,6 +105,19 @@ func main() {
 			continue
 		}
 		events := make([]usage.Event, 0, len(records))
+		// One span per batch, linked to the trace of every request it bills (a batch has many parents).
+		var links []trace.Link
+		for _, r := range records {
+			h := make(map[string]string, len(r.Headers))
+			for _, kv := range r.Headers {
+				h[kv.Key] = string(kv.Value)
+			}
+			if sc := trace.SpanContextFromContext(tracing.Extract(context.Background(), h)); sc.IsValid() {
+				links = append(links, trace.Link{SpanContext: sc})
+			}
+		}
+		bctx, batchSpan := tracer.Start(ctx, "meter.batch", trace.WithLinks(links...),
+			trace.WithAttributes(attribute.Int("meter.records", len(records))))
 		for _, r := range records {
 			var e usage.Event
 			if err := json.Unmarshal(r.Value, &e); err != nil || e.RequestID == "" {
@@ -107,14 +131,21 @@ func main() {
 		// Retry the same batch until the database takes it; never commit offsets past unwritten events.
 		began := time.Now()
 		for backoff := 200 * time.Millisecond; ; backoff = min(backoff*2, 10*time.Second) {
-			n, err := store.Apply(ctx, events)
+			actx, applySpan := tracer.Start(bctx, "postgres.apply")
+			n, err := store.Apply(actx, events)
+			if err != nil {
+				applySpan.SetStatus(codes.Error, err.Error())
+			}
+			applySpan.End()
 			if err == nil {
+				batchSpan.SetAttributes(attribute.Int("meter.new", n), attribute.Int("meter.duplicate", len(events)-n))
 				fresh += n
 				mm.Records.WithLabelValues("new").Add(float64(n))
 				mm.Records.WithLabelValues("duplicate").Add(float64(len(events) - n))
 				break
 			}
 			if ctx.Err() != nil {
+				batchSpan.End()
 				return // shutting down; the uncommitted batch is replayed on restart
 			}
 			mm.DBErrors.Inc()
@@ -130,6 +161,7 @@ func main() {
 			logger.Warn("offset commit failed; the batch will be replayed and ignored", "err", err)
 			mm.CommitErrors.Inc()
 		}
+		batchSpan.End()
 		total += len(records)
 		logger.Info("batch", "records", len(records), "new", fresh, "seen", total, "malformed", malformed)
 	}
@@ -157,3 +189,5 @@ func watchLag(ctx context.Context, adm *kadm.Client, group string, g prometheus.
 		}
 	}
 }
+
+var tracer = otel.Tracer("github.com/byteB8/llm-gateway/meter")
