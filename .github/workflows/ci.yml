@@ -38,5 +38,9 @@ jobs:
         run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
       - run: go vet ./...
       - run: go test -race -count=1 ./...
+      - name: integration tests ran (not skipped)
+        run: |
+          go test -count=1 -v -run 'TestKafkaPublishes|TestReplayedBatchIsNotCountedTwice' ./internal/usage ./internal/meter | tee it.out
+          ! grep -q -- '--- SKIP' it.out
       - name: build image
         run: docker build -t llm-gateway:ci .
