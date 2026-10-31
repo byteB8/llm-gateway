@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Service
+metadata: {name: alert-sink, namespace: observability}
+spec:
+  selector: {app: alert-sink}
+  ports: [{port: 8080}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: alert-sink, namespace: observability}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: alert-sink}}
+  template:
+    metadata: {labels: {app: alert-sink}}
+    spec:
+      containers:
+        - name: alert-sink
+          image: llm-gateway:dev
+          imagePullPolicy: Never
+          command: [/usr/local/bin/alertsink]
+          ports: [{containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {memory: 64Mi}

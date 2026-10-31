@@ -40,5 +40,24 @@ grafana:
         nodeGraph: {enabled: true}
         serviceMap: {datasourceUid: prometheus}
 
+# Every alert goes to alert-sink, which records when it arrived (experiments measure time to detect).
+# The chart's always-firing Watchdog heartbeat is dropped.
 alertmanager:
   service: {type: NodePort, nodePort: 30093}
+  config:
+    global: {resolve_timeout: 1m}
+    route:
+      receiver: alert-sink
+      group_by: [alertname]
+      group_wait: 0s
+      group_interval: 10s
+      repeat_interval: 1h
+      routes:
+        - receiver: "null"
+          matchers: ['alertname = "Watchdog"']
+    receivers:
+      - name: "null"
+      - name: alert-sink
+        webhook_configs:
+          - url: http://alert-sink.observability.svc:8080/alerts
+            send_resolved: true

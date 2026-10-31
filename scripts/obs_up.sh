@@ -17,6 +17,7 @@ kubectl apply -k deploy/observability >/dev/null
 # Running pods keep the image they started with: restart ours when the build produced a new one.
 if [ "$before" != "$(docker image inspect -f '{{.Id}}' llm-gateway:dev)" ]; then
   kubectl -n llmgw rollout restart deployment/gateway deployment/meter statefulset/fakellm >/dev/null
+  kubectl -n observability rollout restart deployment/alert-sink >/dev/null
   kubectl -n llmgw rollout status deployment/gateway --timeout=300s >/dev/null
   kubectl -n llmgw rollout status statefulset/fakellm --timeout=300s >/dev/null
 fi
