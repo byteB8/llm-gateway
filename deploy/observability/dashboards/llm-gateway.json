@@ -793,6 +793,57 @@
   },
   {
    "type": "timeseries",
+   "title": "Ejected backends",
+   "description": "1 while a gateway skips the backend after 3 failures in a row (outlier ejection): 5 s, doubling up to 30 s while it keeps failing.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "max by (backend) (llmgw_backend_ejected)",
+     "legendFormat": "{{backend}}",
+     "exemplar": false,
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "showPoints": "never"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 16,
+   "gridPos": {
+    "x": 16,
+    "y": 36,
+    "w": 8,
+    "h": 8
+   }
+  },
+  {
+   "type": "timeseries",
    "title": "Backend queue (fake backends)",
    "description": "",
    "datasource": {
@@ -845,10 +896,10 @@
      "sort": "desc"
     }
    },
-   "id": 16,
+   "id": 17,
    "gridPos": {
-    "x": 16,
-    "y": 36,
+    "x": 0,
+    "y": 44,
     "w": 8,
     "h": 8
    }
@@ -896,11 +947,11 @@
      "sort": "desc"
     }
    },
-   "id": 17,
+   "id": 18,
    "gridPos": {
-    "x": 0,
+    "x": 8,
     "y": 44,
-    "w": 12,
+    "w": 8,
     "h": 8
    }
   },
@@ -947,11 +998,11 @@
      "sort": "desc"
     }
    },
-   "id": 18,
+   "id": 19,
    "gridPos": {
-    "x": 12,
+    "x": 16,
     "y": 44,
-    "w": 12,
+    "w": 8,
     "h": 8
    }
   },
@@ -960,7 +1011,7 @@
    "title": "Tenants and limits",
    "collapsed": false,
    "panels": [],
-   "id": 19,
+   "id": 20,
    "gridPos": {
     "x": 0,
     "y": 52,
@@ -1011,7 +1062,7 @@
      "sort": "desc"
     }
    },
-   "id": 20,
+   "id": 21,
    "gridPos": {
     "x": 0,
     "y": 53,
@@ -1062,7 +1113,7 @@
      "sort": "desc"
     }
    },
-   "id": 21,
+   "id": 22,
    "gridPos": {
     "x": 12,
     "y": 53,
@@ -1075,7 +1126,7 @@
    "title": "Billing pipeline",
    "collapsed": false,
    "panels": [],
-   "id": 22,
+   "id": 23,
    "gridPos": {
     "x": 0,
     "y": 61,
@@ -1126,7 +1177,7 @@
      "sort": "desc"
     }
    },
-   "id": 23,
+   "id": 24,
    "gridPos": {
     "x": 0,
     "y": 62,
@@ -1177,7 +1228,7 @@
      "sort": "desc"
     }
    },
-   "id": 24,
+   "id": 25,
    "gridPos": {
     "x": 8,
     "y": 62,
@@ -1228,7 +1279,7 @@
      "sort": "desc"
     }
    },
-   "id": 25,
+   "id": 26,
    "gridPos": {
     "x": 16,
     "y": 62,

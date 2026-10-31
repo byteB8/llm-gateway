@@ -98,13 +98,16 @@ def gateway_dashboard():
              desc="Summed over gateway replicas. Capacity is vLLM's max_num_seqs; above it, requests queue in the backend.")
     L.series("Backend failures / s", [(rate("llmgw_backend_failures_total", "backend, reason"), "{{backend}} {{reason}}")],
              "reqps", desc="Attempts that failed before any byte; the gateway moved those requests to another backend.")
+    L.series("Ejected backends", [("max by (backend) (llmgw_backend_ejected)", "{{backend}}")], "short",
+             desc="1 while a gateway skips the backend after 3 failures in a row (outlier ejection): 5 s, doubling "
+                  "up to 30 s while it keeps failing.")
     L.series("Backend queue (fake backends)", [("sum by (pod) (fakellm_requests_waiting)", "{{pod}} waiting"),
                                                ("sum by (pod) (fakellm_requests_running)", "{{pod}} running")], "short")
     L.series("Prefix-cache hit rate (fake backends)",
              [(f'{rate("fakellm_prefix_cache_hits_total")} / clamp_min({rate("fakellm_prefix_cache_queries_total")}, 1e-9)',
-               "hit rate")], "percentunit", w=12)
+               "hit rate")], "percentunit")
     L.series("Injected faults / s", [(rate("fakellm_injected_faults_total", "pod, kind"), "{{pod}} {{kind}}")], "reqps",
-             w=12, desc="Faults switched on through POST /fault during experiments.")
+             desc="Faults switched on through POST /fault during experiments.")
 
     L.row("Tenants and limits")
     L.series("Rate-limited / s", [(rate("llmgw_rate_limited_total", "tenant, reason"), "{{tenant}} {{reason}}")],

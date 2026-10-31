@@ -62,10 +62,14 @@ def build():
                                                  f"(windows compressed {COMPRESSION}x for experiments)."},
             })
     causes = [
+        # On state, not on the failure rate: once the gateway ejects a dead backend it stops sending it
+        # requests, so its failure rate falls to a probe now and then while it is still down.
         {"alert": "LLMGatewayBackendFailing",
-         "expr": "sum by (backend) (rate(llmgw_backend_failures_total[1m])) > 0.1", "for": "30s",
+         "expr": ("max by (backend) (llmgw_backend_consecutive_failures) >= 3"
+                  " and on() sum(rate(llmgw_requests_total[1m])) > 0.5"), "for": "30s",
          "labels": {"severity": "ticket"},
-         "annotations": {"summary": "Backend {{ $labels.backend }} is failing requests (the gateway retries elsewhere)"}},
+         "annotations": {"summary": "Backend {{ $labels.backend }} has failed every attempt for 30 s; "
+                                    "the gateway is routing around it"}},
         {"alert": "LLMGatewayUsageEventsLost",
          "expr": 'sum(increase(llmgw_usage_events_total{result=~"failed|dropped"}[5m])) > 0',
          "labels": {"severity": "ticket"},
