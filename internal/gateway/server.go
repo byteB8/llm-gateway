@@ -104,7 +104,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 			s.log.Warn("backend failed", "backend", b.Name, "attempt", attempt+1, "err", lastErr)
 			continue
 		}
-		ttfb, n, copyErr := s.stream(w, resp, b, attempt+1)
+		ttfb, n, copyErr := s.stream(w, resp, b, attempt+1, start)
 		b.Release()
 		s.log.Info("request", "backend", b.Name, "attempts", attempt+1, "status", resp.StatusCode,
 			"stream", req.Stream, "ttfb_ms", ms(ttfb), "dur_ms", ms(time.Since(start)), "bytes", n,
@@ -128,8 +128,9 @@ func (s *Server) forward(r *http.Request, b *router.Backend, body []byte) (*http
 }
 
 // stream copies the backend response to the client, flushing after every read so tokens are
-// not held back. It returns the time to the first body byte from the backend.
-func (s *Server) stream(w http.ResponseWriter, resp *http.Response, b *router.Backend, attempts int) (time.Duration, int64, error) {
+// not held back. It returns the time from the request's arrival (start) to the first body byte,
+// which includes the backend's queueing and prefill.
+func (s *Server) stream(w http.ResponseWriter, resp *http.Response, b *router.Backend, attempts int, start time.Time) (time.Duration, int64, error) {
 	defer resp.Body.Close()
 	for _, h := range passHeaders {
 		if v := resp.Header.Get(h); v != "" {
@@ -141,7 +142,6 @@ func (s *Server) stream(w http.ResponseWriter, resp *http.Response, b *router.Ba
 	w.WriteHeader(resp.StatusCode)
 	flusher, _ := w.(http.Flusher)
 
-	start := time.Now()
 	var ttfb time.Duration
 	var total int64
 	buf := make([]byte, 32<<10)
