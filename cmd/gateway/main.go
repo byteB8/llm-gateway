@@ -15,8 +15,12 @@ import (
 	"time"
 
 	"github.com/byteB8/llm-gateway/internal/gateway"
+	"github.com/byteB8/llm-gateway/internal/metrics"
 	"github.com/byteB8/llm-gateway/internal/router"
 	"github.com/byteB8/llm-gateway/internal/usage"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -33,7 +37,7 @@ func main() {
 	partitions := flag.Int("usage-partitions", 4, "partitions if the topic has to be created")
 	buffered := flag.Int("usage-buffer", 10000, "usage events held in memory before new ones are dropped")
 	drain := flag.Duration("drain", 30*time.Second, "on SIGTERM, wait this long for open streams to finish")
-	admin := flag.String("admin-listen", ":8081", "admin address for GET /drain (the Kubernetes preStop hook); keep it off the Service")
+	admin := flag.String("admin-listen", ":8081", "admin address for GET /metrics and GET /drain (the preStop hook); keep it off the public Service")
 	notice := flag.Duration("drain-notice", 5*time.Second, "how long GET /drain keeps serving with Connection: close before returning")
 	flag.Parse()
 
@@ -81,12 +85,15 @@ func main() {
 		}()
 	}
 
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	g := gateway.New(gateway.Config{
 		MaxAttempts:      *attempts,
 		Tenants:          tenants,
 		DefaultMaxTokens: *defaultMax,
 		BackendKey:       os.Getenv("BACKEND_API_KEY"), // an env var keeps it out of the process list
 		Publisher:        pub,
+		Metrics:          metrics.NewGateway(reg),
 	}, backends, p, logger)
 
 	srv := &http.Server{Addr: *addr, Handler: g.Handler(), ReadHeaderTimeout: 10 * time.Second}
@@ -100,6 +107,8 @@ func main() {
 	// The preStop hook calls GET /drain on the admin port: from then on every response says
 	// "Connection: close", and the hook returns after drain-notice, when clients have moved on.
 	adminMux := http.NewServeMux()
+	// OpenMetrics format, so latency histograms can carry trace exemplars.
+	adminMux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{EnableOpenMetrics: true}))
 	adminMux.HandleFunc("GET /drain", func(w http.ResponseWriter, _ *http.Request) {
 		logger.Info("drain notice", "for", notice.String())
 		g.StartDraining()
