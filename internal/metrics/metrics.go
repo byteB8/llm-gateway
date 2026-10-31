@@ -72,3 +72,39 @@ func (m *Gateway) GaugeFunc(name, help string, labels prometheus.Labels, f func(
 func (m *Gateway) CounterFunc(name, help string, labels prometheus.Labels, f func() float64) {
 	m.reg.MustRegister(prometheus.NewCounterFunc(prometheus.CounterOpts{Name: name, Help: help, ConstLabels: labels}, f))
 }
+
+type Meter struct {
+	Records      *prometheus.CounterVec // result: new | duplicate | malformed
+	BatchSeconds prometheus.Histogram
+	DBErrors     prometheus.Counter
+	CommitErrors prometheus.Counter
+	Lag          prometheus.Gauge
+}
+
+func NewMeter(reg prometheus.Registerer) *Meter {
+	m := &Meter{
+		Records: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "llmgw_meter_records_total",
+			Help: "Usage records consumed: new (billed), duplicate (replayed, ignored) or malformed (skipped).",
+		}, []string{"result"}),
+		BatchSeconds: prometheus.NewHistogram(prometheus.HistogramOpts{
+			Name:    "llmgw_meter_batch_seconds",
+			Help:    "Time to write one batch to Postgres, including retries.",
+			Buckets: []float64{.001, .005, .01, .025, .05, .1, .25, .5, 1, 5, 30},
+		}),
+		DBErrors: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "llmgw_meter_db_errors_total",
+			Help: "Failed batch writes (each is retried).",
+		}),
+		CommitErrors: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "llmgw_meter_commit_errors_total",
+			Help: "Failed offset commits (the batch is replayed and ignored).",
+		}),
+		Lag: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "llmgw_meter_consumer_lag",
+			Help: "Usage records in Kafka not yet committed by the meter's consumer group, over all partitions.",
+		}),
+	}
+	reg.MustRegister(m.Records, m.BatchSeconds, m.DBErrors, m.CommitErrors, m.Lag)
+	return m
+}
