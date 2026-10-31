@@ -4,6 +4,7 @@ package gateway
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -19,8 +20,14 @@ import (
 	"github.com/byteB8/llm-gateway/internal/metrics"
 	"github.com/byteB8/llm-gateway/internal/openai"
 	"github.com/byteB8/llm-gateway/internal/router"
+	"github.com/byteB8/llm-gateway/internal/tracing"
 	"github.com/byteB8/llm-gateway/internal/usage"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Config struct {
@@ -89,7 +96,9 @@ func New(cfg Config, backends []*router.Backend, policy router.Policy, log *slog
 		IdleConnTimeout:       90 * time.Second,
 		ResponseHeaderTimeout: cfg.ResponseHeaderTimeout,
 	}
-	return &Server{cfg: cfg, backends: backends, policy: policy, client: &http.Client{Transport: transport}, limiter: limiter, log: log}
+	// otelhttp adds a client span per backend call and sends the W3C traceparent header with it.
+	client := &http.Client{Transport: otelhttp.NewTransport(transport)}
+	return &Server{cfg: cfg, backends: backends, policy: policy, client: client, limiter: limiter, log: log}
 }
 
 // StartDraining makes every later response carry "Connection: close". Clients then open their next
@@ -170,7 +179,13 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	if maxTokens <= 0 {
 		maxTokens = s.cfg.DefaultMaxTokens
 	}
+	reqSpan := trace.SpanFromContext(r.Context())
+	reqSpan.SetAttributes(attribute.String("llmgw.tenant", tenant), attribute.String("gen_ai.request.model", req.Model),
+		attribute.Bool("llmgw.stream", req.Stream), attribute.String("llmgw.policy", s.policy.Name()))
+	_, admitSpan := tracer.Start(r.Context(), "admit")
 	ticket, d := s.limiter.Admit(tenant, openai.PromptTokens(req.Messages)+maxTokens)
+	admitSpan.SetAttributes(attribute.Bool("llmgw.allowed", d.Allowed), attribute.String("llmgw.limit_reason", d.Reason))
+	admitSpan.End()
 	if d.RemainingReqs >= 0 {
 		w.Header().Set("X-RateLimit-Remaining-Requests", strconv.Itoa(int(d.RemainingReqs)))
 	}
@@ -202,7 +217,9 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	var lastErr string
 	for attempt, b := range order {
 		b.Acquire()
-		resp, err := s.forward(r, b, body)
+		actx, attemptSpan := tracer.Start(r.Context(), "backend "+b.Name, trace.WithAttributes(
+			attribute.String("llmgw.backend", b.Name), attribute.Int("llmgw.attempt", attempt+1)))
+		resp, err := s.forward(actx, r, b, body)
 		if err != nil || resp.StatusCode >= 500 {
 			reason := "connect"
 			if err == nil {
@@ -213,6 +230,8 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 				lastErr = b.Name + ": " + err.Error()
 			}
 			b.Release()
+			attemptSpan.SetStatus(codes.Error, lastErr)
+			attemptSpan.End()
 			if r.Context().Err() != nil { // the client went away; don't try the others
 				s.count(tenant, b.Name, 499) // nginx's "client closed request"
 				ticket.Done(0)
@@ -225,13 +244,25 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		tap := &usageTap{stream: req.Stream}
 		ttfb, n, copyErr := s.stream(w, resp, b, attempt+1, start, tap)
 		b.Release()
+		if n > 0 {
+			attemptSpan.AddEvent("first_byte", trace.WithTimestamp(start.Add(ttfb)))
+		}
+		if copyErr != nil {
+			attemptSpan.SetStatus(codes.Error, copyErr.Error())
+		}
+		attemptSpan.End()
 		used, prompt, completion := -1, 0, 0 // -1: usage unknown, keep the whole reservation
 		if u := tap.Usage(); u != nil {
 			used, prompt, completion = u.TotalTokens, u.PromptTokens, u.CompletionTokens
 		}
 		ticket.Done(used)
-		s.record(tenant, b.Name, resp.StatusCode, ttfb, n, time.Since(start), prompt, completion, used >= 0, copyErr)
+		traceID := tracing.SampledTraceID(r.Context())
+		s.record(tenant, b.Name, resp.StatusCode, ttfb, n, time.Since(start), prompt, completion, used >= 0, copyErr, traceID)
+		reqSpan.SetAttributes(attribute.String("llmgw.backend", b.Name), attribute.Int("llmgw.attempts", attempt+1),
+			attribute.Float64("llmgw.ttft_ms", ms(ttfb)), attribute.Int("gen_ai.usage.input_tokens", prompt),
+			attribute.Int("gen_ai.usage.output_tokens", completion))
 		s.cfg.Publisher.Publish(usage.Event{
+			Trace:     tracing.Inject(r.Context()),
 			RequestID: reqID, Tenant: tenant, Backend: b.Name, Model: req.Model, Status: resp.StatusCode,
 			Stream: req.Stream, PromptTokens: prompt, CompletionTokens: completion, UsageKnown: used >= 0,
 			TTFBms: ms(ttfb), DurationMs: ms(time.Since(start)), Time: start.UTC(),
@@ -249,8 +280,8 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusBadGateway, "no backend could serve the request: "+lastErr)
 }
 
-func (s *Server) forward(r *http.Request, b *router.Backend, body []byte) (*http.Response, error) {
-	up, err := http.NewRequestWithContext(r.Context(), http.MethodPost, b.URL+"/v1/chat/completions", bytes.NewReader(body))
+func (s *Server) forward(ctx context.Context, r *http.Request, b *router.Backend, body []byte) (*http.Response, error) {
+	up, err := http.NewRequestWithContext(ctx, http.MethodPost, b.URL+"/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -365,13 +396,13 @@ func (s *Server) count(tenant, backend string, code int) {
 
 // record updates the metrics of a request a backend answered.
 func (s *Server) record(tenant, backend string, code int, ttfb time.Duration, bytes int64, dur time.Duration,
-	prompt, completion int, usageKnown bool, streamErr error) {
+	prompt, completion int, usageKnown bool, streamErr error, traceID string) {
 	m := s.cfg.Metrics
 	s.count(tenant, backend, code)
 	if bytes > 0 {
-		m.TTFT.WithLabelValues(backend).Observe(ttfb.Seconds())
+		observe(m.TTFT.WithLabelValues(backend), ttfb.Seconds(), traceID)
 	}
-	m.Duration.WithLabelValues(backend).Observe(dur.Seconds())
+	observe(m.Duration.WithLabelValues(backend), dur.Seconds(), traceID)
 	if usageKnown {
 		m.Tokens.WithLabelValues(tenant, "prompt").Add(float64(prompt))
 		m.Tokens.WithLabelValues(tenant, "completion").Add(float64(completion))
@@ -380,4 +411,16 @@ func (s *Server) record(tenant, backend string, code int, ttfb time.Duration, by
 	if errors.As(streamErr, &se) {
 		m.Interrupted.WithLabelValues(backend, se.side).Inc()
 	}
+}
+
+var tracer = otel.Tracer("github.com/byteB8/llm-gateway/gateway")
+
+// observe records a latency and, when the request is traced, the trace id as an exemplar, so a
+// dashboard can jump from a slow histogram bucket to the trace of a request that landed in it.
+func observe(o prometheus.Observer, v float64, traceID string) {
+	if eo, ok := o.(prometheus.ExemplarObserver); ok && traceID != "" {
+		eo.ObserveWithExemplar(v, prometheus.Labels{"trace_id": traceID})
+		return
+	}
+	o.Observe(v)
 }

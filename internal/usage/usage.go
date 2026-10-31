@@ -31,6 +31,9 @@ type Event struct {
 	TTFBms           float64   `json:"ttfb_ms"`
 	DurationMs       float64   `json:"duration_ms"`
 	Time             time.Time `json:"ts"`
+
+	// Trace is the request's trace context (W3C traceparent), sent as Kafka record headers, not in the JSON.
+	Trace map[string]string `json:"-"`
 }
 
 // NewRequestID returns 16 random bytes in hex; it is the idempotency key downstream.
@@ -84,6 +87,9 @@ func NewKafka(brokers []string, topic string, maxBuffered int) (*Kafka, error) {
 func (k *Kafka) Publish(e Event) {
 	v, _ := json.Marshal(e)
 	rec := &kgo.Record{Key: []byte(e.Tenant), Value: v}
+	for k, val := range e.Trace {
+		rec.Headers = append(rec.Headers, kgo.RecordHeader{Key: k, Value: []byte(val)})
+	}
 	k.client.TryProduce(context.Background(), rec, func(_ *kgo.Record, err error) {
 		switch {
 		case err == nil:
