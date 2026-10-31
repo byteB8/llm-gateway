@@ -30,7 +30,8 @@ ROUND = 3     # pt  (4 px rounded data end)
 GAP = 1.5     # pt  (2 px surface gap)
 FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
 
-plt.rcParams.update({"svg.fonttype": "none", "font.family": "DejaVu Sans", "font.size": 10})
+plt.rcParams.update({"svg.fonttype": "none", "svg.hashsalt": "llm-gateway",  # fixed ids: stable diffs
+                     "font.family": "DejaVu Sans", "font.size": 10})
 
 
 def load(path):
@@ -217,9 +218,47 @@ def herding(mode):
     save(fig, "herding", mode)
 
 
+def overhead(mode):
+    t = THEMES[mode]
+    summary = load("results/sustain/e08.json")["variants"]
+    runs = {v: [] for v in summary}
+    for f in sorted((ROOT / "results" / "sustain").glob("e08-*-r*.json")):
+        r = json.loads(f.read_text())
+        runs[r["variant"]].append(r["cpu_us_per_request"])
+    rows = [("pre", "before metrics and tracing"), ("off", "metrics, tracing off"),
+            ("on10", "metrics + 10% of traces exported"), ("on100", "metrics + every trace exported")]
+    fig, ax = plt.subplots(figsize=(9.6, 3.3), dpi=72, facecolor=t["surface"])
+    fig.subplots_adjust(left=0.30, right=0.97, top=0.70, bottom=0.14)
+    fig.text(0.04, 0.97, "What observability costs the gateway", color=t["ink"], fontsize=13, fontweight="semibold",
+             va="top")
+    fig.text(0.04, 0.875, "CPU time per streaming request, gateway on 2 cores · 30,000 requests per run, 5 runs per "
+             "variant in random order · bar = median, dots = each run.\nTime to first token measured at 500 requests/s "
+             "through a 1 ms-per-token fake backend.", color=t["ink2"], fontsize=9, va="top", linespacing=1.5)
+    top = max(max(v) for v in runs.values()) * 1.75
+    ax.set_xlim(0, top)
+    ax.set_ylim(len(rows) - 0.5, -0.6)
+    style(ax, t, ygrid=False)
+    ax.xaxis.grid(True, color=t["grid"], linewidth=0.75)
+    ax.spines["bottom"].set_visible(False)
+    ax.spines["left"].set_visible(True)
+    ax.spines["left"].set_color(t["base"])
+    ax.set_yticks(range(len(rows)), [label for _, label in rows], color=t["ink2"], fontsize=9.5)
+    ax.set_xlabel("microseconds of CPU per request", color=t["muted"], fontsize=8.5)
+    for y, (v, _) in enumerate(rows):
+        s = summary[v]
+        med = s["cpu_us_per_request"]["median"]
+        hbar(ax, fig, y, [med], [t["muted"] if v == "pre" else t["series"][0]], t)
+        ax.scatter(runs[v], [y] * len(runs[v]), s=26, color=t["ink2"], edgecolors=t["surface"], linewidths=1.5, zorder=4)
+        change = "baseline" if v == "pre" else f"{s['cpu_vs_pre_percent']:+.1f}%"
+        ax.text(max(runs[v]) + top * 0.015, y, f"{med:.0f} µs  ·  {change}  ·  first token {s['ttft_p50_ms']['median']:.2f} ms",
+                va="center", color=t["ink"], fontsize=9.5, fontweight="semibold", zorder=5)
+    save(fig, "overhead", mode)
+
+
 if __name__ == "__main__":
     for mode in THEMES:
         routing(mode)
         rollout(mode)
         herding(mode)
+        overhead(mode)
     print("wrote", sorted(p.name for p in OUT.glob("*.svg")))
