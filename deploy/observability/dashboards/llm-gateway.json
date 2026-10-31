@@ -330,7 +330,8 @@
      "custom": {
       "lineWidth": 2,
       "fillOpacity": 8,
-      "showPoints": "never"
+      "showPoints": "never",
+      "axisSoftMax": 0.01
      }
     },
     "overrides": []
@@ -381,7 +382,8 @@
      "custom": {
       "lineWidth": 2,
       "fillOpacity": 8,
-      "showPoints": "never"
+      "showPoints": "never",
+      "axisSoftMax": 1
      }
     },
     "overrides": []
@@ -605,8 +607,8 @@
   },
   {
    "type": "timeseries",
-   "title": "Gateway CPU and memory",
-   "description": "",
+   "title": "Gateway CPU",
+   "description": "CPU cores used by each gateway replica.",
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -618,19 +620,8 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "sum(rate(process_cpu_seconds_total{job=~\".*gateway.*\"}[1m]))",
-     "legendFormat": "CPU cores",
-     "exemplar": false,
-     "range": true
-    },
-    {
-     "refId": "B",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prometheus"
-     },
-     "expr": "sum(process_resident_memory_bytes{job=~\".*gateway.*\"}) / 1e9",
-     "legendFormat": "RSS GB",
+     "expr": "sum by (pod) (rate(process_cpu_seconds_total{job=~\".*gateway.*\"}[1m]))",
+     "legendFormat": "{{pod}}",
      "exemplar": false,
      "range": true
     }
@@ -661,7 +652,58 @@
    "gridPos": {
     "x": 12,
     "y": 27,
-    "w": 12,
+    "w": 6,
+    "h": 8
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Gateway memory",
+   "description": "Resident memory of each gateway replica.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum by (pod) (process_resident_memory_bytes{job=~\".*gateway.*\"})",
+     "legendFormat": "{{pod}}",
+     "exemplar": false,
+     "range": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "bytes",
+     "min": 0,
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "showPoints": "never"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 13,
+   "gridPos": {
+    "x": 18,
+    "y": 27,
+    "w": 6,
     "h": 8
    }
   },
@@ -670,7 +712,7 @@
    "title": "Backends",
    "collapsed": false,
    "panels": [],
-   "id": 13,
+   "id": 14,
    "gridPos": {
     "x": 0,
     "y": 35,
@@ -732,7 +774,7 @@
      "sort": "desc"
     }
    },
-   "id": 14,
+   "id": 15,
    "gridPos": {
     "x": 0,
     "y": 36,
@@ -768,7 +810,8 @@
      "custom": {
       "lineWidth": 2,
       "fillOpacity": 8,
-      "showPoints": "never"
+      "showPoints": "never",
+      "axisSoftMax": 1
      }
     },
     "overrides": []
@@ -783,7 +826,7 @@
      "sort": "desc"
     }
    },
-   "id": 15,
+   "id": 16,
    "gridPos": {
     "x": 8,
     "y": 36,
@@ -819,7 +862,8 @@
      "custom": {
       "lineWidth": 2,
       "fillOpacity": 8,
-      "showPoints": "never"
+      "showPoints": "never",
+      "axisSoftMax": 1
      }
     },
     "overrides": []
@@ -834,7 +878,7 @@
      "sort": "desc"
     }
    },
-   "id": 16,
+   "id": 17,
    "gridPos": {
     "x": 16,
     "y": 36,
@@ -896,7 +940,7 @@
      "sort": "desc"
     }
    },
-   "id": 17,
+   "id": 18,
    "gridPos": {
     "x": 0,
     "y": 44,
@@ -947,7 +991,7 @@
      "sort": "desc"
     }
    },
-   "id": 18,
+   "id": 19,
    "gridPos": {
     "x": 8,
     "y": 44,
@@ -983,7 +1027,8 @@
      "custom": {
       "lineWidth": 2,
       "fillOpacity": 8,
-      "showPoints": "never"
+      "showPoints": "never",
+      "axisSoftMax": 1
      }
     },
     "overrides": []
@@ -998,7 +1043,7 @@
      "sort": "desc"
     }
    },
-   "id": 19,
+   "id": 20,
    "gridPos": {
     "x": 16,
     "y": 44,
@@ -1011,7 +1056,7 @@
    "title": "Tenants and limits",
    "collapsed": false,
    "panels": [],
-   "id": 20,
+   "id": 21,
    "gridPos": {
     "x": 0,
     "y": 52,
@@ -1047,7 +1092,8 @@
      "custom": {
       "lineWidth": 2,
       "fillOpacity": 8,
-      "showPoints": "never"
+      "showPoints": "never",
+      "axisSoftMax": 1
      }
     },
     "overrides": []
@@ -1062,7 +1108,7 @@
      "sort": "desc"
     }
    },
-   "id": 21,
+   "id": 22,
    "gridPos": {
     "x": 0,
     "y": 53,
@@ -1113,7 +1159,7 @@
      "sort": "desc"
     }
    },
-   "id": 22,
+   "id": 23,
    "gridPos": {
     "x": 12,
     "y": 53,
@@ -1126,7 +1172,7 @@
    "title": "Billing pipeline",
    "collapsed": false,
    "panels": [],
-   "id": 23,
+   "id": 24,
    "gridPos": {
     "x": 0,
     "y": 61,
@@ -1177,7 +1223,7 @@
      "sort": "desc"
     }
    },
-   "id": 24,
+   "id": 25,
    "gridPos": {
     "x": 0,
     "y": 62,
@@ -1228,7 +1274,7 @@
      "sort": "desc"
     }
    },
-   "id": 25,
+   "id": 26,
    "gridPos": {
     "x": 8,
     "y": 62,
@@ -1279,7 +1325,7 @@
      "sort": "desc"
     }
    },
-   "id": 26,
+   "id": 27,
    "gridPos": {
     "x": 16,
     "y": 62,

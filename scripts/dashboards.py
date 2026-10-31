@@ -35,13 +35,16 @@ class Layout:
         self._add({"type": "row", "title": title, "collapsed": False, "panels": []}, 24, 1)
         self.x, self.y, self.row_h = 0, self.y + 1, 0
 
-    def series(self, title, targets, unit="short", w=8, h=8, desc="", exemplars=False, min0=True):
+    def series(self, title, targets, unit="short", w=8, h=8, desc="", exemplars=False, min0=True, soft_max=None):
+        # soft_max: the axis shows at least 0..soft_max, so a panel of zeros is not drawn as 0..100.
+        custom = {"lineWidth": 2, "fillOpacity": 8, "showPoints": "never"}
+        if soft_max is not None:
+            custom["axisSoftMax"] = soft_max
         self._add({
             "type": "timeseries", "title": title, "description": desc, "datasource": PROM,
             "targets": [{"refId": chr(65 + i), "datasource": PROM, "expr": e, "legendFormat": leg,
                          "exemplar": exemplars, "range": True} for i, (e, leg) in enumerate(targets)],
-            "fieldConfig": {"defaults": {"unit": unit, "min": 0 if min0 else None,
-                                         "custom": {"lineWidth": 2, "fillOpacity": 8, "showPoints": "never"}},
+            "fieldConfig": {"defaults": {"unit": unit, "min": 0 if min0 else None, "custom": custom},
                             "overrides": []},
             "options": {"legend": {"displayMode": "list", "placement": "bottom"},
                         "tooltip": {"mode": "multi", "sort": "desc"}},
@@ -74,10 +77,10 @@ def gateway_dashboard():
              desc="Every chat request, by the HTTP status the client got. 429 = rate limited, 502 = no backend, "
                   "499 = client left before an answer.")
     availability = next(s for s in SLOS if s["name"] == "availability")
-    L.series("Error ratio (availability SLI)", [(availability["error"]("1m"), "bad share")], "percentunit",
+    L.series("Error ratio (availability SLI)", [(availability["error"]("1m"), "bad share")], "percentunit", soft_max=0.01,
              desc="The availability SLO's own expression over 1 minute: 5xx answers plus streams cut by a backend, "
                   "over requests that were not the client's fault (4xx).")
-    L.series("Streams cut after they started", [(rate("llmgw_stream_interrupted_total", "side"), "{{side}}")], "reqps",
+    L.series("Streams cut after they started", [(rate("llmgw_stream_interrupted_total", "side"), "{{side}}")], "reqps", soft_max=1,
              desc="Responses broken mid-stream: the client left, or the backend failed. Not visible in status codes.")
 
     L.row("Latency")
@@ -88,17 +91,18 @@ def gateway_dashboard():
              "s", w=12, exemplars=True)
     L.series("Request duration", [(quantile(q, "llmgw_request_duration_seconds"), f"p{int(q * 100)}") for q in (0.5, 0.99)],
              "s", w=12)
-    L.series("Gateway CPU and memory", [("sum(rate(process_cpu_seconds_total{job=~\".*gateway.*\"}[1m]))", "CPU cores"),
-                                        ("sum(process_resident_memory_bytes{job=~\".*gateway.*\"}) / 1e9", "RSS GB")],
-             "short", w=12)
+    L.series("Gateway CPU", [('sum by (pod) (rate(process_cpu_seconds_total{job=~".*gateway.*"}[1m]))', "{{pod}}")],
+             "short", w=6, desc="CPU cores used by each gateway replica.")
+    L.series("Gateway memory", [('sum by (pod) (process_resident_memory_bytes{job=~".*gateway.*"})', "{{pod}}")],
+             "bytes", w=6, desc="Resident memory of each gateway replica.")
 
     L.row("Backends")
     L.series("In flight vs capacity", [("sum by (backend) (llmgw_backend_inflight)", "{{backend}} in flight"),
                                        ("max by (backend) (llmgw_backend_capacity)", "{{backend}} capacity")], "short",
              desc="Summed over gateway replicas. Capacity is vLLM's max_num_seqs; above it, requests queue in the backend.")
     L.series("Backend failures / s", [(rate("llmgw_backend_failures_total", "backend, reason"), "{{backend}} {{reason}}")],
-             "reqps", desc="Attempts that failed before any byte; the gateway moved those requests to another backend.")
-    L.series("Ejected backends", [("max by (backend) (llmgw_backend_ejected)", "{{backend}}")], "short",
+             "reqps", soft_max=1, desc="Attempts that failed before any byte; the gateway moved those requests to another backend.")
+    L.series("Ejected backends", [("max by (backend) (llmgw_backend_ejected)", "{{backend}}")], "short", soft_max=1,
              desc="1 while a gateway skips the backend after 3 failures in a row (outlier ejection): 5 s, doubling "
                   "up to 30 s while it keeps failing.")
     L.series("Backend queue (fake backends)", [("sum by (pod) (fakellm_requests_waiting)", "{{pod}} waiting"),
@@ -106,12 +110,12 @@ def gateway_dashboard():
     L.series("Prefix-cache hit rate (fake backends)",
              [(f'{rate("fakellm_prefix_cache_hits_total")} / clamp_min({rate("fakellm_prefix_cache_queries_total")}, 1e-9)',
                "hit rate")], "percentunit")
-    L.series("Injected faults / s", [(rate("fakellm_injected_faults_total", "pod, kind"), "{{pod}} {{kind}}")], "reqps",
+    L.series("Injected faults / s", [(rate("fakellm_injected_faults_total", "pod, kind"), "{{pod}} {{kind}}")], "reqps", soft_max=1,
              desc="Faults switched on through POST /fault during experiments.")
 
     L.row("Tenants and limits")
     L.series("Rate-limited / s", [(rate("llmgw_rate_limited_total", "tenant, reason"), "{{tenant}} {{reason}}")],
-             "reqps", w=12)
+             "reqps", w=12, soft_max=1)
     L.series("Tokens / s", [(rate("llmgw_tokens_total", "tenant, kind"), "{{tenant}} {{kind}}")], "short", w=12)
 
     L.row("Billing pipeline")
