@@ -1,0 +1,22 @@
+{
+  "client": {
+    "requests": 2400,
+    "errors": 0,
+    "status": {
+      "200": 2400
+    },
+    "prompt_tokens": 2520000,
+    "completion_tokens": 153600
+  },
+  "billed": {
+    "requests": 2400,
+    "prompt_tokens": 2520000,
+    "completion_tokens": 153600
+  },
+  "producer": {
+    "published": 2400,
+    "failed": 0,
+    "dropped": 0
+  },
+  "billing_exact": true
+}
