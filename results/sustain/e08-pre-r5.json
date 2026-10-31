@@ -1,0 +1,24 @@
+{
+  "variant": "pre",
+  "rep": 5,
+  "requests": 30000,
+  "errors": 0,
+  "throughput_rps": 2826.9,
+  "cpu_us_per_request": 464.0,
+  "latency_rate": 500,
+  "ttft_ms": {
+    "p50": 0.804,
+    "p90": 1.272,
+    "p99": 2.852,
+    "mean": 0.9337668885842955
+  },
+  "total_ms": {
+    "p50": 22.034,
+    "p90": 23.878,
+    "p99": 25.635,
+    "mean": 22.099832289015026
+  },
+  "rss_mb": 13.3,
+  "spans_exported": 0,
+  "spans_per_request": 0.0
+}

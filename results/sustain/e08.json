@@ -1,0 +1,192 @@
+{
+ "experiment": "e08",
+ "machine": "sustain, gateway on 2 cores (GOMAXPROCS=2)",
+ "variants": {
+  "pre": {
+   "label": "before metrics and tracing",
+   "runs": 5,
+   "errors": 0,
+   "cpu_us_per_request": {
+    "median": 468.0,
+    "min": 461.3,
+    "max": 473.3
+   },
+   "cpu_vs_pre_percent": 0.0,
+   "throughput_rps": {
+    "median": 2826.9,
+    "min": 2798.1,
+    "max": 2834.1
+   },
+   "ttft_p50_ms": {
+    "median": 0.8,
+    "min": 0.8,
+    "max": 0.81
+   },
+   "ttft_p99_ms": {
+    "median": 2.71,
+    "min": 2.56,
+    "max": 2.87
+   },
+   "rss_mb": {
+    "median": 13.3,
+    "min": 12.8,
+    "max": 13.7
+   },
+   "spans_per_request": {
+    "median": 0.0,
+    "min": 0.0,
+    "max": 0.0
+   },
+   "latency_phase_rate": 500
+  },
+  "off": {
+   "label": "metrics, tracing off",
+   "runs": 5,
+   "errors": 0,
+   "cpu_us_per_request": {
+    "median": 503.3,
+    "min": 501.7,
+    "max": 506.0
+   },
+   "cpu_vs_pre_percent": 7.5,
+   "throughput_rps": {
+    "median": 2859.9,
+    "min": 2836.4,
+    "max": 2879.1
+   },
+   "ttft_p50_ms": {
+    "median": 0.85,
+    "min": 0.84,
+    "max": 0.85
+   },
+   "ttft_p99_ms": {
+    "median": 3.0,
+    "min": 2.95,
+    "max": 3.43
+   },
+   "rss_mb": {
+    "median": 20.2,
+    "min": 19.9,
+    "max": 20.5
+   },
+   "spans_per_request": {
+    "median": 0.0,
+    "min": 0.0,
+    "max": 0.0
+   },
+   "latency_phase_rate": 500
+  },
+  "on10": {
+   "label": "metrics, 10% of traces",
+   "runs": 5,
+   "errors": 0,
+   "cpu_us_per_request": {
+    "median": 520.3,
+    "min": 519.0,
+    "max": 522.0
+   },
+   "cpu_vs_pre_percent": 11.2,
+   "throughput_rps": {
+    "median": 2783.6,
+    "min": 2779.5,
+    "max": 2803.9
+   },
+   "ttft_p50_ms": {
+    "median": 0.86,
+    "min": 0.84,
+    "max": 0.87
+   },
+   "ttft_p99_ms": {
+    "median": 3.19,
+    "min": 3.07,
+    "max": 3.38
+   },
+   "rss_mb": {
+    "median": 22.6,
+    "min": 21.6,
+    "max": 23.4
+   },
+   "spans_per_request": {
+    "median": 0.4,
+    "min": 0.4,
+    "max": 0.42
+   },
+   "latency_phase_rate": 500
+  },
+  "on100": {
+   "label": "metrics, every trace",
+   "runs": 5,
+   "errors": 0,
+   "cpu_us_per_request": {
+    "median": 564.0,
+    "min": 562.0,
+    "max": 566.0
+   },
+   "cpu_vs_pre_percent": 20.5,
+   "throughput_rps": {
+    "median": 2836.1,
+    "min": 2810.1,
+    "max": 2840.6
+   },
+   "ttft_p50_ms": {
+    "median": 0.88,
+    "min": 0.87,
+    "max": 0.89
+   },
+   "ttft_p99_ms": {
+    "median": 3.79,
+    "min": 3.48,
+    "max": 4.16
+   },
+   "rss_mb": {
+    "median": 22.9,
+    "min": 22.5,
+    "max": 23.6
+   },
+   "spans_per_request": {
+    "median": 4.0,
+    "min": 4.0,
+    "max": 4.0
+   },
+   "latency_phase_rate": 500
+  }
+ },
+ "profile_cpu_share_percent": {
+  "OTel SDK: spans and batch export": {
+   "off": 0.0,
+   "on100": 10.69
+  },
+  "OTLP encoding and sending (part of the SDK row)": {
+   "off": 0.0,
+   "on100": 6.08
+  },
+  "otelhttp wrappers, without the work they wrap": {
+   "off": 2.67,
+   "on100": 3.63
+  },
+  "Prometheus client": {
+   "off": 0.42,
+   "on100": 0.88
+  },
+  "garbage collection": {
+   "off": 13.36,
+   "on100": 15.95
+  },
+  "memory allocation": {
+   "off": 15.77,
+   "on100": 18.03
+  },
+  "system calls": {
+   "off": 33.56,
+   "on100": 26.7
+  },
+  "JSON": {
+   "off": 13.29,
+   "on100": 11.7
+  },
+  "usage tap (reads token counts from the stream)": {
+   "off": 7.1,
+   "on100": 6.68
+  }
+ }
+}
