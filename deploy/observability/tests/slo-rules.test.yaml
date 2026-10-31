@@ -1,0 +1,164 @@
+# Unit tests for the SLO and cause alerts: scripts/test_rules.py runs them with `promtool test rules`.
+# Windows are compressed 12x (scripts/slo_rules.py): fast burn = 14.4x over 5m and 30s, slow burn = 6x over
+# 30m and 150s. Each case keeps total traffic constant, so after t seconds of an error ratio e the long
+# window's ratio is e * t / window, which gives the expected firing times in the comments.
+# Series notation: 'a+bxn' is n+1 samples a, a+b, ..., a+n*b, one per interval; '_' is a missing sample.
+rule_files: [slo-rules.rules.yaml]
+evaluation_interval: 5s
+
+tests:
+  - name: half the requests fail after 30 clean minutes
+    interval: 5s
+    input_series:
+      - series: 'llmgw_requests_total{code="200"}'
+        values: '0+50x359 18000+25x360'  # 10 req/s, then 5 req/s succeed...
+      - series: 'llmgw_requests_total{code="502"}'
+        values: '0x359 0+25x360'         # ...and 5 req/s fail: total stays 10 req/s
+    alert_rule_test:
+      # fast: 5m ratio = t/600 > 0.072 at t = 43 s
+      - {eval_time: 30m30s, alertname: LLMGatewayAvailabilityFastBurn, exp_alerts: []}
+      - eval_time: 31m
+        alertname: LLMGatewayAvailabilityFastBurn
+        exp_alerts: [{exp_labels: {severity: page, slo: availability}}]
+      # slow: 30m ratio = t/3600 > 0.03 at t = 108 s
+      - {eval_time: 31m30s, alertname: LLMGatewayAvailabilitySlowBurn, exp_alerts: []}
+      - eval_time: 32m30s
+        alertname: LLMGatewayAvailabilitySlowBurn
+        exp_alerts: [{exp_labels: {severity: page, slo: availability}}]
+
+  - name: streams cut by a backend burn the budget even before any 5xx exists
+    # Regression test: "a + b or vector(0)" is "(a + b) or vector(0)", and a + b is empty while no 5xx
+    # series exists yet, which hid every cut stream.
+    interval: 5s
+    input_series:
+      - series: 'llmgw_requests_total{code="200"}'
+        values: '0+50x720'  # cut streams still answered 200: total stays 10 req/s
+      - series: 'llmgw_stream_interrupted_total{side="backend"}'
+        values: '0x359 0+25x360'
+    alert_rule_test:
+      - eval_time: 31m
+        alertname: LLMGatewayAvailabilityFastBurn
+        exp_alerts: [{exp_labels: {severity: page, slo: availability}}]
+
+  - name: streams the client walked away from do not burn the budget
+    interval: 5s
+    input_series:
+      - series: 'llmgw_requests_total{code="200"}'
+        values: '0+50x720'
+      - series: 'llmgw_stream_interrupted_total{side="client"}'
+        values: '0x359 0+25x360'
+    alert_rule_test:
+      - {eval_time: 32m, alertname: LLMGatewayAvailabilityFastBurn, exp_alerts: []}
+
+  - name: a 15-second burst of failures does not page
+    interval: 5s
+    input_series:
+      - series: 'llmgw_requests_total{code="200"}'
+        values: '0+50x360 18000x2 18050+50x356'
+      - series: 'llmgw_requests_total{code="502"}'
+        values: '0x360 50+50x2 150x356'  # 150 failures = 5% of the 5m window, under 7.2%
+    alert_rule_test:
+      - {eval_time: 30m15s, alertname: LLMGatewayAvailabilityFastBurn, exp_alerts: []}
+      - {eval_time: 30m30s, alertname: LLMGatewayAvailabilityFastBurn, exp_alerts: []}
+      - {eval_time: 31m, alertname: LLMGatewayAvailabilityFastBurn, exp_alerts: []}
+      - {eval_time: 31m, alertname: LLMGatewayAvailabilitySlowBurn, exp_alerts: []}
+      - {eval_time: 33m, alertname: LLMGatewayAvailabilitySlowBurn, exp_alerts: []}
+
+  - name: rate-limited requests (4xx) do not burn the availability budget
+    interval: 5s
+    input_series:
+      - series: 'llmgw_requests_total{code="200"}'
+        values: '0+50x359 18000+25x360'
+      - series: 'llmgw_requests_total{code="429"}'
+        values: '0x359 0+25x360'
+    alert_rule_test:
+      - {eval_time: 32m, alertname: LLMGatewayAvailabilityFastBurn, exp_alerts: []}
+      - {eval_time: 45m, alertname: LLMGatewayAvailabilitySlowBurn, exp_alerts: []}
+
+  - name: one failure in two requests is not enough traffic to page
+    interval: 10s
+    input_series:
+      - series: 'llmgw_requests_total{code="200"}'
+        values: '0+1x360'  # 0.1 req/s
+      - series: 'llmgw_requests_total{code="502"}'
+        values: '0+1x360'  # 0.1 req/s: half fail, but 0.2 req/s is under the 0.5 req/s guard
+    alert_rule_test:
+      - {eval_time: 10m, alertname: LLMGatewayAvailabilityFastBurn, exp_alerts: []}
+      - {eval_time: 45m, alertname: LLMGatewayAvailabilitySlowBurn, exp_alerts: []}
+
+  - name: a quarter of first tokens slower than 500 ms after 30 clean minutes
+    interval: 5s
+    input_series:
+      - series: 'llmgw_requests_total{code="200"}'
+        values: '0+50x720'
+      - series: 'llmgw_ttft_seconds_count'
+        values: '0+50x720'
+      - series: 'llmgw_ttft_seconds_bucket{le="0.5"}'
+        values: '0+50x359 18000+37.5x360'
+    alert_rule_test:
+      # fast: 5m ratio = t/1200 > 0.144 at t = 173 s
+      - {eval_time: 32m30s, alertname: LLMGatewayLatencyFastBurn, exp_alerts: []}
+      - eval_time: 33m30s
+        alertname: LLMGatewayLatencyFastBurn
+        exp_alerts: [{exp_labels: {severity: page, slo: latency}}]
+      # slow: 30m ratio = t/7200 > 0.06 at t = 432 s
+      - {eval_time: 36m30s, alertname: LLMGatewayLatencySlowBurn, exp_alerts: []}
+      - eval_time: 38m
+        alertname: LLMGatewayLatencySlowBurn
+        exp_alerts: [{exp_labels: {severity: page, slo: latency}}]
+
+  - name: a backend that fails every attempt for 30 s opens a ticket
+    interval: 5s
+    input_series:
+      - series: 'llmgw_requests_total{code="200"}'
+        values: '0+50x240'
+      - series: 'llmgw_backend_consecutive_failures{backend="fakellm-3"}'
+        values: '0x120 3x120'
+    alert_rule_test:
+      - {eval_time: 10m20s, alertname: LLMGatewayBackendFailing, exp_alerts: []}
+      - eval_time: 10m40s
+        alertname: LLMGatewayBackendFailing
+        exp_alerts: [{exp_labels: {severity: ticket, backend: fakellm-3}}]
+
+  - name: an idle gateway's stale failure count does not open a ticket
+    interval: 5s
+    input_series:
+      - series: 'llmgw_requests_total{code="200"}'
+        values: '0+50x120 6000x120'  # traffic stops at 10 min...
+      - series: 'llmgw_backend_consecutive_failures{backend="fakellm-3"}'
+        values: '0x120 3x120'          # ...as the count reaches 3, with no request left to reset it
+    alert_rule_test:
+      - {eval_time: 12m, alertname: LLMGatewayBackendFailing, exp_alerts: []}
+
+  - name: a lost usage event opens a ticket for 5 minutes
+    interval: 5s
+    input_series:
+      - series: 'llmgw_usage_events_total{result="failed"}'
+        values: '0x120 1x120'
+    alert_rule_test:
+      - eval_time: 10m30s
+        alertname: LLMGatewayUsageEventsLost
+        exp_alerts: [{exp_labels: {severity: ticket}}]
+      - {eval_time: 16m, alertname: LLMGatewayUsageEventsLost, exp_alerts: []}
+
+  - name: billing lag over 500 records for a minute opens a ticket
+    interval: 5s
+    input_series:
+      - series: 'llmgw_meter_consumer_lag'
+        values: '0x120 600x120'
+    alert_rule_test:
+      - {eval_time: 10m40s, alertname: LLMGatewayBillingLag, exp_alerts: []}
+      - eval_time: 11m30s
+        alertname: LLMGatewayBillingLag
+        exp_alerts: [{exp_labels: {severity: ticket}}]
+
+  - name: a meter that stops reporting opens a ticket
+    interval: 5s
+    input_series:
+      - series: 'llmgw_meter_consumer_lag'
+        values: '0x60 _x120'
+    alert_rule_test:
+      - {eval_time: 6m30s, alertname: LLMGatewayMeterNotReporting, exp_alerts: []}
+      - eval_time: 7m30s
+        alertname: LLMGatewayMeterNotReporting
+        exp_alerts: [{exp_labels: {severity: ticket}}]
