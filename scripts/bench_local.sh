@@ -9,6 +9,7 @@ TAG=${1:-run}; shift || true
 N=${N:-4}
 POLICIES=${POLICIES:-"round-robin least-loaded prefix-affinity"}
 FAKE_FLAGS=${FAKE_FLAGS:-""}
+GATEWAY_FLAGS=${GATEWAY_FLAGS:-""}
 OUT=results/local; RAW=results/raw/local
 mkdir -p "$OUT" "$RAW" bin
 go build -o bin/ ./cmd/...
@@ -29,7 +30,8 @@ for policy in $POLICIES; do
     pids+=($!)
     spec+="fake$i=http://127.0.0.1:$port,"
   done
-  bin/gateway -listen 127.0.0.1:8080 -backends "${spec%,}" -policy "$policy" >"$RAW/gateway-$TAG-$policy.log" 2>&1 &
+  # shellcheck disable=SC2086
+  bin/gateway -listen 127.0.0.1:8080 -backends "${spec%,}" -policy "$policy" $GATEWAY_FLAGS >"$RAW/gateway-$TAG-$policy.log" 2>&1 &
   pids+=($!)
   for i in $(seq 1 "$N"); do wait_up "http://127.0.0.1:$((9000 + i))"; done
   wait_up http://127.0.0.1:8080
