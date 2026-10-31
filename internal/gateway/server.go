@@ -304,9 +304,10 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		used, prompt, completion, known := -1, 0, 0, false // -1: usage unknown, keep the whole reservation
 		if u := tap.Usage(); u != nil {
 			used, prompt, completion, known = u.TotalTokens, u.PromptTokens, u.CompletionTokens, true
-		} else if n > 0 {
+		} else if n > 0 && resp.StatusCode == http.StatusOK {
 			// The answer ended without the backend's usage (the client left, or the backend stopped early).
 			// Bill an estimate, not zero: the gateway's own prompt count and one token per streamed chunk.
+			// A backend's 4xx did no work and stays at zero.
 			prompt, completion = openai.PromptTokens(req.Messages), tap.chunks
 		}
 		ticket.Done(used)

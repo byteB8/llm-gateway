@@ -274,3 +274,28 @@ func TestUnreportedUsageIsEstimated(t *testing.T) {
 		t.Fatalf("event %+v: want an estimate of 2 prompt + 3 completion tokens, marked unknown", e)
 	}
 }
+
+func TestBackendErrorIsNotEstimated(t *testing.T) {
+	// A backend's 4xx carries no usage because the backend did no work: it is billed zero, not an estimate.
+	be := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":{"message":"prompt is too long","code":400}}`))
+	}))
+	defer be.Close()
+	bs := []*router.Backend{{Name: "f", URL: be.URL}}
+	p, _ := router.New("round-robin", bs, 1.25)
+	events := &capture{}
+	gw := httptest.NewServer(New(Config{Publisher: events}, bs, p, slog.New(slog.NewTextHandler(io.Discard, nil))).Handler())
+	defer gw.Close()
+
+	resp := chat(t, gw.URL, true)
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest || len(events.events) != 1 {
+		t.Fatalf("status %d, %d events", resp.StatusCode, len(events.events))
+	}
+	if e := events.events[0]; e.Status != http.StatusBadRequest || e.PromptTokens != 0 || e.CompletionTokens != 0 {
+		t.Fatalf("event %+v: want status 400 and 0 tokens", e)
+	}
+}
