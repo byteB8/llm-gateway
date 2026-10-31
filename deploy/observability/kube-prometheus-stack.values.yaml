@@ -40,21 +40,22 @@ grafana:
         nodeGraph: {enabled: true}
         serviceMap: {datasourceUid: prometheus}
 
-# Every alert goes to alert-sink, which records when it arrived (experiments measure time to detect).
-# The chart's always-firing Watchdog heartbeat is dropped.
+# This repo's alerts go to alert-sink, which records when each arrived (experiments measure time to
+# detect). The chart's own platform alerts, its always-firing Watchdog among them, go nowhere: on a
+# laptop kind node some fire for good (clock not synchronised) and would only add noise.
 alertmanager:
   service: {type: NodePort, nodePort: 30093}
   config:
     global: {resolve_timeout: 1m}
     route:
-      receiver: alert-sink
+      receiver: "null"
       group_by: [alertname]
       group_wait: 0s
       group_interval: 10s
       repeat_interval: 1h
       routes:
-        - receiver: "null"
-          matchers: ['alertname = "Watchdog"']
+        - receiver: alert-sink
+          matchers: ['alertname =~ "LLMGateway.+"']
     receivers:
       - name: "null"
       - name: alert-sink
