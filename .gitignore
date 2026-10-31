@@ -1,0 +1,5 @@
+/bin/
+/results/raw/
+*.log
+*.out
+.remote
