@@ -30,10 +30,13 @@ type Config struct {
 	Zipf         float64 `json:"zipf"` // > 1 skews prefix popularity; 0 means uniform
 	Seed         int64   `json:"seed"`
 	Model        string  `json:"model"`
+	Key          string  `json:"-"` // sent as a bearer token; kept out of the saved summary
 }
 
 type Result struct {
 	Prefix   int           `json:"prefix"`
+	Status   int           `json:"status"`
+	Prompt   int           `json:"prompt_tokens"`
 	TTFT     time.Duration `json:"ttft_ns"`
 	Total    time.Duration `json:"total_ns"`
 	Tokens   int           `json:"tokens"`
@@ -52,6 +55,9 @@ type Summary struct {
 	TTFTms       Percentiles    `json:"ttft_ms"`
 	TotalMs      Percentiles    `json:"total_ms"`
 	CacheHitRate float64        `json:"cache_hit_rate"`
+	PromptTokens int            `json:"prompt_tokens"`     // over successful requests
+	OutputTokens int            `json:"completion_tokens"` // tokens streamed back
+	StatusCodes  map[int]int    `json:"status_codes"`
 	PerBackend   map[string]int `json:"per_backend"`
 	FirstErrors  []string       `json:"first_errors,omitempty"`
 }
@@ -112,12 +118,16 @@ func one(ctx context.Context, client *http.Client, cfg Config, system, user stri
 		return Result{Err: err.Error()}
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if cfg.Key != "" {
+		req.Header.Set("Authorization", "Bearer "+cfg.Key)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return Result{Err: err.Error()}
 	}
 	defer resp.Body.Close()
-	res := Result{Backend: resp.Header.Get("X-Gateway-Backend"), CacheHit: resp.Header.Get("X-Prefix-Cache") == "hit"}
+	res := Result{Status: resp.StatusCode, Prompt: openai.CountTokens(system) + openai.CountTokens(user),
+		Backend: resp.Header.Get("X-Gateway-Backend"), CacheHit: resp.Header.Get("X-Prefix-Cache") == "hit"}
 	if res.Backend == "" {
 		res.Backend = resp.Header.Get("X-Backend")
 	}
@@ -151,10 +161,11 @@ func one(ctx context.Context, client *http.Client, cfg Config, system, user stri
 }
 
 func summarise(cfg Config, rs []Result, wall time.Duration) Summary {
-	s := Summary{Config: cfg, Requests: len(rs), WallSec: wall.Seconds(), PerBackend: map[string]int{}}
+	s := Summary{Config: cfg, Requests: len(rs), WallSec: wall.Seconds(), PerBackend: map[string]int{}, StatusCodes: map[int]int{}}
 	var ttft, total []float64
 	var tokens, hits int
 	for _, r := range rs {
+		s.StatusCodes[r.Status]++
 		if r.Err != "" {
 			s.Errors++
 			if len(s.FirstErrors) < 5 {
@@ -165,6 +176,7 @@ func summarise(cfg Config, rs []Result, wall time.Duration) Summary {
 		ttft = append(ttft, ms(r.TTFT))
 		total = append(total, ms(r.Total))
 		tokens += r.Tokens
+		s.PromptTokens += r.Prompt
 		if r.CacheHit {
 			hits++
 		}
@@ -174,6 +186,7 @@ func summarise(cfg Config, rs []Result, wall time.Duration) Summary {
 	if ok > 0 {
 		s.CacheHitRate = float64(hits) / float64(ok)
 	}
+	s.OutputTokens = tokens
 	s.ReqPerSec = float64(ok) / wall.Seconds()
 	s.TokPerSec = float64(tokens) / wall.Seconds()
 	s.TTFTms, s.TotalMs = percentiles(ttft), percentiles(total)

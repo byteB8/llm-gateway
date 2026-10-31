@@ -24,6 +24,7 @@ func main() {
 	flag.Float64Var(&c.Zipf, "zipf", 0, "prefix popularity skew (> 1), 0 for uniform")
 	flag.Int64Var(&c.Seed, "seed", 1, "random seed")
 	flag.StringVar(&c.Model, "model", "fake", "model name sent in the request")
+	flag.StringVar(&c.Key, "key", "", "API key sent as a bearer token")
 	out := flag.String("o", "", "also write the summary to this file")
 	raw := flag.String("raw", "", "write one JSON line per request to this file")
 	flag.Parse()
