@@ -255,10 +255,80 @@ def overhead(mode):
     save(fig, "overhead", mode)
 
 
+def place_labels(ax, fig, items, t):
+    """Labels next to points without overlaps: each takes the first free spot (left, right, then further
+    above or below), with a leader line when it had to move off the point's own row."""
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    taken = [ax.transData.transform((x, y)) for x, y, _ in items]  # the markers themselves
+    taken = [(px - 7, py - 7, px + 7, py + 7) for px, py in taken]
+    spots = [(-9, 0), (9, 0), (-9, 13), (-9, -13), (9, 13), (9, -13), (-9, 26), (-9, -26), (9, 26), (9, -26)]
+    for x, y, text in sorted(items, key=lambda i: -i[1]):
+        for dx, dy in spots:
+            a = ax.annotate(text, (x, y), xytext=(dx, dy), textcoords="offset points", ha="right" if dx < 0 else "left",
+                            va="center", color=t["ink"], fontsize=9, fontweight="semibold", zorder=5)
+            b = a.get_window_extent(renderer)
+            box = (b.x0 - 2, b.y0 - 1, b.x1 + 2, b.y1 + 1)
+            if not any(box[0] < o[2] and o[0] < box[2] and box[1] < o[3] and o[1] < box[3] for o in taken):
+                taken.append(box)
+                if dy:
+                    a.arrow_patch = None
+                    a.remove()
+                    ax.annotate(text, (x, y), xytext=(dx, dy), textcoords="offset points", ha="right" if dx < 0 else "left",
+                                va="center", color=t["ink"], fontsize=9, fontweight="semibold", zorder=5,
+                                arrowprops=dict(arrowstyle="-", color=t["muted"], linewidth=0.75, shrinkA=0, shrinkB=5))
+                break
+            a.remove()
+
+
+def detect(mode, path="results/local/e07.json"):
+    """Each page from the fault experiment: the time the window maths predicted against the time it fired."""
+    t = THEMES[mode]
+    e07 = load(path)
+    points = []  # (predicted s, measured s, fast?, trial, episodes)
+    for sc in e07["scenarios"]:
+        for a in sc["alerts"]:
+            pred = sc["predicted_pages"].get(a["alert"], {})
+            if a["severity"] == "page" and "ttd_s" in a and pred.get("ttd_traffic_s"):
+                points.append((pred["ttd_traffic_s"], a["ttd_s"], "Fast" in a["alert"], sc["id"], a.get("episodes", 1)))
+    fig, ax = plt.subplots(figsize=(9.6, 5.0), dpi=72, facecolor=t["surface"])
+    fig.subplots_adjust(left=0.11, right=0.97, top=0.73, bottom=0.12)
+    fig.text(0.04, 0.975, "When the SLO alerts paged: predicted and measured", color=t["ink"], fontsize=13,
+             fontweight="semibold", va="top")
+    fig.text(0.04, 0.905, "Faults injected one at a time under steady load (kind, 8 requests/s). Predicted: when the long window's "
+             "error ratio crosses the alert's threshold,\nfrom the error ratio and traffic Prometheus measured during the fault "
+             f"(windows compressed {e07['compression']}x). Measured: arrival at Alertmanager's webhook.", color=t["ink2"],
+             fontsize=9, va="top", linespacing=1.5)
+    legend(fig, t, ["fast burn: 14.4x over 5 min and 30 s", "slow burn: 6x over 30 min and 150 s"], t["series"][:2], y=0.79)
+    lo, hi = 25, 2000
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlim(lo, hi)
+    ax.set_ylim(lo, hi)
+    style(ax, t)
+    ax.xaxis.grid(True, color=t["grid"], linewidth=0.75)
+    ticks = [30, 60, 120, 300, 600, 1200]
+    names = ["30 s", "1 min", "2 min", "5 min", "10 min", "20 min"]
+    ax.set_xticks(ticks, names)
+    ax.set_yticks(ticks, names)
+    ax.minorticks_off()
+    ax.set_xlabel("predicted time from fault to page", color=t["muted"], fontsize=8.5)
+    ax.set_ylabel("measured", color=t["muted"], fontsize=8.5)
+    ax.plot([lo, hi], [lo, hi], color=t["muted"], linewidth=1, zorder=2)
+    ax.annotate("measured = predicted", (1100, 1100), xytext=(-4, 6), textcoords="offset points", color=t["muted"],
+                fontsize=8.5, ha="right", va="bottom", rotation=45, rotation_mode="anchor", transform_rotates_text=True)
+    for x, y, fast, _, _ in points:
+        ax.scatter([x], [y], s=64, color=t["series"][0 if fast else 1], edgecolors=t["surface"], linewidths=2, zorder=4)
+    place_labels(ax, fig, [(x, y, trial + (f" · flapped, {n} pages" if n > 1 else "")) for x, y, _, trial, n in points], t)
+    save(fig, "detect", mode)
+
+
 if __name__ == "__main__":
     for mode in THEMES:
         routing(mode)
         rollout(mode)
         herding(mode)
         overhead(mode)
+        if (ROOT / "results/local/e07.json").exists():
+            detect(mode)
     print("wrote", sorted(p.name for p in OUT.glob("*.svg")))
