@@ -1,0 +1,47 @@
+{
+  "source": "gateway logs of e05 pressure runs; requests ordered by start time = log time - duration",
+  "runs": {
+    "round-robin-r1": {
+      "dispatches": 1500,
+      "mean_streak": 1.015,
+      "max_streak": 2,
+      "streaks_ge4": 0,
+      "requests_in_streaks_ge4": 0
+    },
+    "round-robin-r2": {
+      "dispatches": 1500,
+      "mean_streak": 1.014,
+      "max_streak": 3,
+      "streaks_ge4": 0,
+      "requests_in_streaks_ge4": 0
+    },
+    "least-loaded-r1": {
+      "dispatches": 1500,
+      "mean_streak": 5.952,
+      "max_streak": 16,
+      "streaks_ge4": 177,
+      "requests_in_streaks_ge4": 1381
+    },
+    "least-loaded-r2": {
+      "dispatches": 1500,
+      "mean_streak": 5.172,
+      "max_streak": 16,
+      "streaks_ge4": 180,
+      "requests_in_streaks_ge4": 1339
+    },
+    "prefix-affinity-r1": {
+      "dispatches": 1500,
+      "mean_streak": 1.961,
+      "max_streak": 8,
+      "streaks_ge4": 90,
+      "requests_in_streaks_ge4": 439
+    },
+    "prefix-affinity-r2": {
+      "dispatches": 1500,
+      "mean_streak": 1.971,
+      "max_streak": 8,
+      "streaks_ge4": 97,
+      "requests_in_streaks_ge4": 461
+    }
+  }
+}
