@@ -44,7 +44,7 @@ spec:
             - -tenants=/etc/llmgw/tenants.json
             - -kafka-brokers=kafka:9092
             - -drain=25s
-          ports: [{containerPort: 8080}]
+          ports: [{containerPort: 8080}, {containerPort: 8081, name: admin}]
           readinessProbe:
             httpGet: {path: /health, port: 8080}
             periodSeconds: 2
@@ -52,10 +52,10 @@ spec:
             httpGet: {path: /health, port: 8080}
             periodSeconds: 10
           lifecycle:
-            # Keep serving for a moment after the pod is marked terminating, so Services stop
-            # sending it new connections before the listener closes. (distroless has no shell,
-            # so this uses the built-in sleep action.)
-            preStop: {sleep: {seconds: 5}}
+            # Before SIGTERM: keep serving for 5 s while every response says "Connection: close",
+            # so clients move their keep-alive connections to other pods before the listener closes.
+            # The admin port is not in the Service, so outside clients cannot call /drain.
+            preStop: {httpGet: {path: /drain, port: 8081}}
           resources:
             requests: {cpu: 100m, memory: 64Mi}
             limits: {memory: 256Mi}

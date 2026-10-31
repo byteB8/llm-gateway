@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # e04: restart the gateway Deployment twice while 32 clients stream through it. Does any request fail?
-#   scripts/e04_rollout.sh safe    # manifests as they are: preStop pause + 25 s drain
+#   scripts/e04_rollout.sh safe    # manifests as they are: preStop /drain notice + 25 s drain
 #   scripts/e04_rollout.sh naive   # no preStop pause, no drain: what most first deployments look like
 set -euo pipefail
 cd "$(dirname "$0")/.."
