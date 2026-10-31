@@ -14,6 +14,7 @@ type usageTap struct {
 	partial []byte // a streamed line not yet terminated by '\n'
 	body    []byte // a non-streaming response, kept up to maxBody
 	usage   *openai.Usage
+	chunks  int // streamed chunks that carried text: about one token each (vLLM's default and the fake's)
 }
 
 const maxBody = 1 << 20
@@ -41,7 +42,13 @@ func (u *usageTap) Write(p []byte) {
 
 func (u *usageTap) line(l []byte) {
 	data, ok := bytes.CutPrefix(bytes.TrimRight(l, "\r"), []byte("data: "))
-	if !ok || !bytes.Contains(data, []byte(`"usage"`)) {
+	if !ok {
+		return
+	}
+	if bytes.Contains(data, []byte(`"content":"`)) && !bytes.Contains(data, []byte(`"content":""`)) {
+		u.chunks++
+	}
+	if !bytes.Contains(data, []byte(`"usage"`)) {
 		return
 	}
 	var c struct {

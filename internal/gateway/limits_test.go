@@ -244,3 +244,33 @@ func TestDefaultMaxTokensIsForwarded(t *testing.T) {
 		t.Fatalf("backend saw max_tokens %q", seen)
 	}
 }
+
+func TestUnreportedUsageIsEstimated(t *testing.T) {
+	// A stream that ends without the backend's usage (here the backend sends none; a client that leaves
+	// mid-stream ends the same way) is billed as an estimate, not as zero tokens.
+	noUsage := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Write([]byte("data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"\"}}]}\n\n"))
+		for _, tok := range []string{"one", " two", " three"} {
+			w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"" + tok + "\"}}]}\n\n"))
+		}
+		w.Write([]byte("data: [DONE]\n\n"))
+	})
+	be := httptest.NewServer(noUsage)
+	defer be.Close()
+	bs := []*router.Backend{{Name: "f", URL: be.URL}}
+	p, _ := router.New("round-robin", bs, 1.25)
+	events := &capture{}
+	gw := httptest.NewServer(New(Config{Publisher: events}, bs, p, slog.New(slog.NewTextHandler(io.Discard, nil))).Handler())
+	defer gw.Close()
+
+	resp := chat(t, gw.URL, true) // "hello there": 2 prompt tokens by the gateway's count
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if len(events.events) != 1 {
+		t.Fatalf("%d events", len(events.events))
+	}
+	if e := events.events[0]; e.UsageKnown || e.PromptTokens != 2 || e.CompletionTokens != 3 {
+		t.Fatalf("event %+v: want an estimate of 2 prompt + 3 completion tokens, marked unknown", e)
+	}
+}

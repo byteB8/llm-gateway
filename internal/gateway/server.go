@@ -301,20 +301,24 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 			attemptSpan.SetStatus(codes.Error, copyErr.Error())
 		}
 		attemptSpan.End()
-		used, prompt, completion := -1, 0, 0 // -1: usage unknown, keep the whole reservation
+		used, prompt, completion, known := -1, 0, 0, false // -1: usage unknown, keep the whole reservation
 		if u := tap.Usage(); u != nil {
-			used, prompt, completion = u.TotalTokens, u.PromptTokens, u.CompletionTokens
+			used, prompt, completion, known = u.TotalTokens, u.PromptTokens, u.CompletionTokens, true
+		} else if n > 0 {
+			// The answer ended without the backend's usage (the client left, or the backend stopped early).
+			// Bill an estimate, not zero: the gateway's own prompt count and one token per streamed chunk.
+			prompt, completion = openai.PromptTokens(req.Messages), tap.chunks
 		}
 		ticket.Done(used)
 		traceID := tracing.SampledTraceID(r.Context())
-		s.record(tenant, b.Name, resp.StatusCode, ttfb, n, time.Since(start), prompt, completion, used >= 0, copyErr, traceID)
+		s.record(tenant, b.Name, resp.StatusCode, ttfb, n, time.Since(start), prompt, completion, known, copyErr, traceID)
 		reqSpan.SetAttributes(attribute.String("llmgw.backend", b.Name), attribute.Int("llmgw.attempts", attempt+1),
 			attribute.Float64("llmgw.ttft_ms", ms(ttfb)), attribute.Int("gen_ai.usage.input_tokens", prompt),
 			attribute.Int("gen_ai.usage.output_tokens", completion))
 		s.cfg.Publisher.Publish(usage.Event{
 			Trace:     tracing.Inject(r.Context()),
 			RequestID: reqID, IdempotencyKey: idemKey, Tenant: tenant, Backend: b.Name, Model: req.Model, Status: resp.StatusCode,
-			Stream: req.Stream, PromptTokens: prompt, CompletionTokens: completion, UsageKnown: used >= 0,
+			Stream: req.Stream, PromptTokens: prompt, CompletionTokens: completion, UsageKnown: known,
 			TTFBms: ms(ttfb), DurationMs: ms(time.Since(start)), Time: start.UTC(),
 		})
 		s.log.Info("request", "tenant", tenant, "backend", b.Name, "attempts", attempt+1, "status", resp.StatusCode,
