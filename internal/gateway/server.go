@@ -8,11 +8,13 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"math"
 	"net"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/byteB8/llm-gateway/internal/limit"
 	"github.com/byteB8/llm-gateway/internal/openai"
 	"github.com/byteB8/llm-gateway/internal/router"
 )
@@ -20,6 +22,9 @@ import (
 type Config struct {
 	MaxAttempts           int           // backends tried per request; 0 means all of them
 	ResponseHeaderTimeout time.Duration // a backend that sends no headers in this time is skipped
+	Tenants               *Tenants      // nil: no authentication, everyone is "anonymous"
+	DefaultMaxTokens      int           // reserved for a request that sets no max_tokens
+	BackendKey            string        // sent to backends as a bearer token (vLLM --api-key)
 }
 
 type Server struct {
@@ -27,6 +32,7 @@ type Server struct {
 	backends []*router.Backend
 	policy   router.Policy
 	client   *http.Client
+	limiter  *limit.Limiter
 	log      *slog.Logger
 }
 
@@ -37,6 +43,15 @@ func New(cfg Config, backends []*router.Backend, policy router.Policy, log *slog
 	if cfg.ResponseHeaderTimeout <= 0 {
 		cfg.ResponseHeaderTimeout = 2 * time.Minute
 	}
+	if cfg.DefaultMaxTokens <= 0 {
+		cfg.DefaultMaxTokens = 256
+	}
+	limiter := limit.New(nil)
+	if cfg.Tenants != nil {
+		for _, t := range cfg.Tenants.list {
+			limiter.Set(t.Name, t.Limits)
+		}
+	}
 	transport := &http.Transport{
 		DialContext:           (&net.Dialer{Timeout: 2 * time.Second}).DialContext,
 		MaxIdleConns:          1024,
@@ -44,7 +59,7 @@ func New(cfg Config, backends []*router.Backend, policy router.Policy, log *slog
 		IdleConnTimeout:       90 * time.Second,
 		ResponseHeaderTimeout: cfg.ResponseHeaderTimeout,
 	}
-	return &Server{cfg: cfg, backends: backends, policy: policy, client: &http.Client{Transport: transport}, log: log}
+	return &Server{cfg: cfg, backends: backends, policy: policy, client: &http.Client{Transport: transport}, limiter: limiter, log: log}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -84,6 +99,30 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "body must be a chat request with at least one message")
 		return
 	}
+	tenant, ok := s.cfg.Tenants.identify(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "missing or unknown API key")
+		return
+	}
+	maxTokens := req.MaxTokens
+	if maxTokens <= 0 {
+		maxTokens = s.cfg.DefaultMaxTokens
+	}
+	ticket, d := s.limiter.Admit(tenant, openai.PromptTokens(req.Messages)+maxTokens)
+	if d.RemainingReqs >= 0 {
+		w.Header().Set("X-RateLimit-Remaining-Requests", strconv.Itoa(int(d.RemainingReqs)))
+	}
+	if d.RemainingTokens >= 0 {
+		w.Header().Set("X-RateLimit-Remaining-Tokens", strconv.Itoa(int(d.RemainingTokens)))
+	}
+	if !d.Allowed {
+		if d.RetryAfter > 0 {
+			w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(d.RetryAfter.Seconds()))))
+		}
+		s.log.Info("rate limited", "tenant", tenant, "reason", d.Reason)
+		writeError(w, http.StatusTooManyRequests, "rate limit exceeded: "+d.Reason)
+		return
+	}
 
 	order := s.policy.Order(openai.PrefixKey(req.Messages))[:s.cfg.MaxAttempts]
 	var lastErr string
@@ -99,18 +138,26 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 			}
 			b.Release()
 			if r.Context().Err() != nil { // the client went away; don't try the others
+				ticket.Done(0)
 				return
 			}
 			s.log.Warn("backend failed", "backend", b.Name, "attempt", attempt+1, "err", lastErr)
 			continue
 		}
-		ttfb, n, copyErr := s.stream(w, resp, b, attempt+1, start)
+		tap := &usageTap{stream: req.Stream}
+		ttfb, n, copyErr := s.stream(w, resp, b, attempt+1, start, tap)
 		b.Release()
-		s.log.Info("request", "backend", b.Name, "attempts", attempt+1, "status", resp.StatusCode,
+		used, prompt, completion := -1, 0, 0 // -1: usage unknown, keep the whole reservation
+		if u := tap.Usage(); u != nil {
+			used, prompt, completion = u.TotalTokens, u.PromptTokens, u.CompletionTokens
+		}
+		ticket.Done(used)
+		s.log.Info("request", "tenant", tenant, "backend", b.Name, "attempts", attempt+1, "status", resp.StatusCode,
 			"stream", req.Stream, "ttfb_ms", ms(ttfb), "dur_ms", ms(time.Since(start)), "bytes", n,
-			"client_gone", copyErr != nil)
+			"prompt_tokens", prompt, "completion_tokens", completion, "client_gone", copyErr != nil)
 		return
 	}
+	ticket.Done(0)
 	s.log.Error("all backends failed", "tried", len(order), "last", lastErr)
 	writeError(w, http.StatusBadGateway, "no backend could serve the request: "+lastErr)
 }
@@ -121,8 +168,9 @@ func (s *Server) forward(r *http.Request, b *router.Backend, body []byte) (*http
 		return nil, err
 	}
 	up.Header.Set("Content-Type", "application/json")
-	if a := r.Header.Get("Authorization"); a != "" {
-		up.Header.Set("Authorization", a)
+	// The client's own key stays here; backends get the gateway's key, if any.
+	if s.cfg.BackendKey != "" {
+		up.Header.Set("Authorization", "Bearer "+s.cfg.BackendKey)
 	}
 	return s.client.Do(up)
 }
@@ -130,7 +178,7 @@ func (s *Server) forward(r *http.Request, b *router.Backend, body []byte) (*http
 // stream copies the backend response to the client, flushing after every read so tokens are
 // not held back. It returns the time from the request's arrival (start) to the first body byte,
 // which includes the backend's queueing and prefill.
-func (s *Server) stream(w http.ResponseWriter, resp *http.Response, b *router.Backend, attempts int, start time.Time) (time.Duration, int64, error) {
+func (s *Server) stream(w http.ResponseWriter, resp *http.Response, b *router.Backend, attempts int, start time.Time, tap *usageTap) (time.Duration, int64, error) {
 	defer resp.Body.Close()
 	for _, h := range passHeaders {
 		if v := resp.Header.Get(h); v != "" {
@@ -152,6 +200,7 @@ func (s *Server) stream(w http.ResponseWriter, resp *http.Response, b *router.Ba
 				ttfb = time.Since(start)
 			}
 			total += int64(n)
+			tap.Write(buf[:n])
 			if _, werr := w.Write(buf[:n]); werr != nil {
 				return ttfb, total, werr
 			}
