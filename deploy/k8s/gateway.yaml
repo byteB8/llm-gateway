@@ -38,7 +38,7 @@ spec:
           imagePullPolicy: Never
           args:
             - -listen=:8080
-            - -backends=fakellm-0=http://fakellm-0.fakellm:9000,fakellm-1=http://fakellm-1.fakellm:9000,fakellm-2=http://fakellm-2.fakellm:9000,fakellm-3=http://fakellm-3.fakellm:9000
+            - -backends=fakellm-0=http://fakellm-0.fakellm.llmgw.svc.cluster.local.:9000,fakellm-1=http://fakellm-1.fakellm.llmgw.svc.cluster.local.:9000,fakellm-2=http://fakellm-2.fakellm.llmgw.svc.cluster.local.:9000,fakellm-3=http://fakellm-3.fakellm.llmgw.svc.cluster.local.:9000
             - -policy=prefix-affinity
             - -capacity=8
             - -tenants=/etc/llmgw/tenants.json
