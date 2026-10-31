@@ -9,7 +9,7 @@ resources:
 configMapGenerator:
   - name: llm-gateway-dashboards
     namespace: observability
-    files: [dashboards/llm-gateway.json]
+    files: [dashboards/llm-gateway.json, dashboards/llm-gateway-trace.json]
     options:
       labels: {grafana_dashboard: "1"}
       disableNameSuffixHash: true

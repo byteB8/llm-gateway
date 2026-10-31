@@ -1,0 +1,59 @@
+{
+ "uid": "llm-gateway-trace",
+ "title": "LLM Gateway: one trace",
+ "tags": [
+  "llm-gateway"
+ ],
+ "timezone": "browser",
+ "schemaVersion": 39,
+ "version": 1,
+ "time": {
+  "from": "now-6h",
+  "to": "now"
+ },
+ "panels": [
+  {
+   "type": "traces",
+   "title": "Trace ${trace}",
+   "datasource": {
+    "type": "tempo",
+    "uid": "tempo"
+   },
+   "id": 1,
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 22
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "tempo",
+      "uid": "tempo"
+     },
+     "queryType": "traceql",
+     "query": "${trace}"
+    }
+   ]
+  }
+ ],
+ "templating": {
+  "list": [
+   {
+    "type": "textbox",
+    "name": "trace",
+    "label": "Trace ID",
+    "query": "",
+    "current": {
+     "text": "",
+     "value": ""
+    }
+   }
+  ]
+ },
+ "annotations": {
+  "list": []
+ }
+}

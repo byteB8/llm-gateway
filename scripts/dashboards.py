@@ -131,8 +131,20 @@ def gateway_dashboard():
             "panels": L.panels, "templating": {"list": []}, "annotations": {"list": []}}
 
 
+def trace_dashboard():
+    """One trace by id (from an exemplar or a log line), for viewers who cannot open Explore."""
+    tempo = {"type": "tempo", "uid": "tempo"}
+    panel = {"type": "traces", "title": "Trace ${trace}", "datasource": tempo, "id": 1,
+             "gridPos": {"x": 0, "y": 0, "w": 24, "h": 22},
+             "targets": [{"refId": "A", "datasource": tempo, "queryType": "traceql", "query": "${trace}"}]}
+    variable = {"type": "textbox", "name": "trace", "label": "Trace ID", "query": "", "current": {"text": "", "value": ""}}
+    return {"uid": "llm-gateway-trace", "title": "LLM Gateway: one trace", "tags": ["llm-gateway"], "timezone": "browser",
+            "schemaVersion": 39, "version": 1, "time": {"from": "now-6h", "to": "now"}, "panels": [panel],
+            "templating": {"list": [variable]}, "annotations": {"list": []}}
+
+
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
-    d = gateway_dashboard()
-    (OUT / "llm-gateway.json").write_text(json.dumps(d, indent=1) + "\n")
-    print(f"wrote {OUT / 'llm-gateway.json'}: {sum(p['type'] != 'row' for p in d['panels'])} panels")
+    for name, d in (("llm-gateway", gateway_dashboard()), ("llm-gateway-trace", trace_dashboard())):
+        (OUT / f"{name}.json").write_text(json.dumps(d, indent=1) + "\n")
+        print(f"wrote {OUT / name}.json: {sum(p['type'] != 'row' for p in d['panels'])} panels")
