@@ -1,4 +1,5 @@
-# One image with all four commands; the Kubernetes manifests pick the command to run.
+# One image with every command (gateway, meter, fakellm, loadgen, alertsink); the Kubernetes manifests
+# pick the command to run.
 FROM golang:1.23-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./

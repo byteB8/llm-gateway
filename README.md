@@ -70,15 +70,16 @@ sequenceDiagram
     G-->>C: tokens, flushed as they arrive
     V-->>G: last chunk carries usage
     G->>G: refund the unused reservation
-    G-)K: usage event, id = Idempotency-Key or a new id
+    G-)K: usage event, id = a new id per served request
     K->>M: batch of events
     M->>P: one transaction: insert events ON CONFLICT DO NOTHING, add only new ones to daily totals
     M->>K: commit offsets, only after the database commit
 ```
 
 A crash between the database commit and the offset commit makes Kafka resend the batch; the
-`ON CONFLICT DO NOTHING` insert ignores it, so totals never double. A client that resends a request
-with the same `Idempotency-Key` is billed once for the same reason.
+`ON CONFLICT DO NOTHING` insert ignores it, so totals never double. The id is the gateway's own, one per
+served request: two requests are two bills. A client's `Idempotency-Key` is stored with the event for audit
+but never used to skip billing (it used to be the id, which let a client reuse one key and pay once).
 
 ## Observability
 
@@ -265,9 +266,10 @@ client's own errors, not the service's.
 2. **A broken backend attracts traffic.** A backend that fails fast holds no requests, so it looks idle
    to load-aware routing: while one backend answered every request with 503, 48% of requests tried it
    first (its usual share was about 30%). Outlier ejection, below, fixes this as well.
-3. **A dead backend stalls every request sent to it.** For 30 s CoreDNS still returns the deleted pod's
-   address and each attempt waits out the 2 s dial timeout; after that, each lookup takes ~1.2 s to say
-   "no such host", because the name walks the pod's `ndots:5` search list out to the upstream DNS.
+3. **A dead backend stalls every request sent to it.** An attempt on it often ran out the gateway's whole
+   2 s dial timeout, which covers the DNS lookup and the connection (the run did not record which one ran
+   out); other lookups took ~1.2 s to say "no such host", because the name walks the pod's `ndots:5`
+   search list out to the upstream DNS.
    **Outlier ejection** fixes it: after three failures in a row a backend is tried last, for 5 s,
    doubling up to 30 s while it keeps failing. Fully qualified backend names
    (`fakellm-3.fakellm.llmgw.svc.cluster.local.`), which CoreDNS answers by itself, were tried on top:
@@ -289,8 +291,8 @@ fakellm-0 served it.
 | Backend answers 503 | outlier ejection | 19 | 5 | 2.3% | 38 s |
 | Backend answers 503 | ejection + fully qualified names | 14 | 8 | 2.7% | 34 s |
 
-Ejection cut the attempts wasted on the broken backend by 96–97% and removed the 2-second stalls of the
-first 30 seconds; the ticket still fired, a little sooner. The fully qualified names made no measurable
+Ejection cut the attempts wasted on the broken backend by 96–97% and removed the 2-second stalls; the
+ticket still fired, a little sooner. The fully qualified names made no measurable
 difference on top: with the backend ejected, too few lookups fail for their cost to show above run-to-run
 noise. What is left, 1.7–2.7% of first tokens over 500 ms, is the price of serving on three backends
 instead of four, with the lost backend's prompts now cache misses elsewhere.
@@ -330,13 +332,15 @@ collection (about 30%) and JSON (12–13%).
 - **Routing**: round-robin, least-loaded, or prefix-affinity (consistent hashing with bounded loads,
   Mirrokni et al. 2018) with a per-backend capacity (`-capacity`, vLLM's `max_num_seqs`).
 - **Streaming and fallthrough**: responses pass through as they arrive; a request moves to the next
-  backend only if the current one refuses or fails before any byte reached the client.
+  backend only if the current one cannot be reached or answers with a 5xx. Once a backend sends another
+  status the gateway commits to it, so one that dies after its status line but before any body byte is
+  aborted, not retried.
 - **Per-tenant limits**: requests/min, tokens/min and concurrent requests per API key; 401 for unknown
   keys, 429 with `Retry-After`; client keys are never forwarded to backends.
 - **Usage events**: idempotent franz-go producer keyed by tenant; a bounded buffer that drops (and counts)
   rather than block serving when Kafka is down.
 - **Kubernetes**: Kafka (KRaft) and Postgres StatefulSets, fake backends, gateway (×2, NodePort, probes,
-  preStop drain), meter; one 34 MB distroless image for all four commands.
+  preStop drain), meter; one distroless image (about 66 MB) for all five commands.
 - **Outlier ejection**: a backend that fails three attempts in a row is tried last for 5 s, doubling up to
   30 s while it keeps failing; one answered request restores it.
 - **Observability**: Prometheus metrics with trace exemplars (OpenMetrics), OpenTelemetry traces across
@@ -403,6 +407,8 @@ scripts/obs_up.sh    # cluster, app, kube-prometheus-stack, Tempo, collector, ru
 - Outlier ejection reacts to failures, not to slowness: a backend that answered 1 s late still got 21%
   of the traffic.
 - Least-loaded herds (above); power-of-two-choices or a random tie-break would likely fix it. Not tried.
+- Usage a backend never reported (a client that left mid-stream) is billed as an estimate, marked
+  `usage_known=false`: the gateway's word count of the prompt and one token per streamed chunk.
 - Kafka and Postgres run as single instances in the manifests; this is a laptop setup, not a production one.
 - The SLO windows are compressed 12× for the experiments; `COMPRESSION = 1` in `scripts/slo_rules.py` gives
   the real 1 h / 6 h windows. Outlier-ejection state and rate limits are per gateway replica.
