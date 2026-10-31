@@ -1,0 +1,19 @@
+# In-cluster load: traffic goes through the gateway Service like a real client's would.
+# Applied by scripts/e04_rollout.sh; the summary JSON is the pod's log.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: loadgen
+  namespace: llmgw
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: loadgen
+          image: llm-gateway:dev
+          imagePullPolicy: Never
+          command: [/usr/local/bin/loadgen]
+          args: [-url=http://gateway:8080, -key=sk-search-dev, -c=32, -n=3000, -prefixes=16,
+                 -prefix-tokens=1000, -suffix-tokens=50, -max-tokens=64]

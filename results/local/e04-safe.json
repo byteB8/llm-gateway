@@ -1,0 +1,51 @@
+{
+  "config": {
+    "url": "http://gateway:8080",
+    "concurrency": 32,
+    "requests": 3000,
+    "prefixes": 16,
+    "prefix_tokens": 1000,
+    "suffix_tokens": 50,
+    "max_tokens": 64,
+    "zipf": 0,
+    "seed": 1,
+    "model": "fake"
+  },
+  "requests": 3000,
+  "errors": 9,
+  "wall_sec": 208.534037823,
+  "req_per_sec": 14.342982235536569,
+  "tokens_per_sec": 917.9508630743404,
+  "ttft_ms": {
+    "p50": 211.643,
+    "p90": 815.99,
+    "p99": 1489.091,
+    "mean": 333.33421430959515
+  },
+  "total_ms": {
+    "p50": 2143.519,
+    "p90": 2746.035,
+    "p99": 3390.956,
+    "mean": 2211.1740992978966
+  },
+  "cache_hit_rate": 0.6188565697091274,
+  "prompt_tokens": 3140550,
+  "completion_tokens": 191424,
+  "status_codes": {
+    "0": 9,
+    "200": 2991
+  },
+  "per_backend": {
+    "fakellm-0": 788,
+    "fakellm-1": 776,
+    "fakellm-2": 804,
+    "fakellm-3": 623
+  },
+  "first_errors": [
+    "Post \"http://gateway:8080/v1/chat/completions\": write tcp 10.244.0.19:48326-\u003e10.96.167.49:8080: use of closed network connection",
+    "Post \"http://gateway:8080/v1/chat/completions\": readfrom tcp 10.244.0.19:48466-\u003e10.96.167.49:8080: write tcp 10.244.0.19:48466-\u003e10.96.167.49:8080: write: broken pipe",
+    "Post \"http://gateway:8080/v1/chat/completions\": readfrom tcp 10.244.0.19:48488-\u003e10.96.167.49:8080: write tcp 10.244.0.19:48488-\u003e10.96.167.49:8080: write: broken pipe",
+    "Post \"http://gateway:8080/v1/chat/completions\": readfrom tcp 10.244.0.19:48310-\u003e10.96.167.49:8080: write tcp 10.244.0.19:48310-\u003e10.96.167.49:8080: write: broken pipe",
+    "Post \"http://gateway:8080/v1/chat/completions\": readfrom tcp 10.244.0.19:48402-\u003e10.96.167.49:8080: write tcp 10.244.0.19:48402-\u003e10.96.167.49:8080: write: broken pipe"
+  ]
+}

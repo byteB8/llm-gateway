@@ -1,0 +1,51 @@
+{
+  "config": {
+    "url": "http://gateway:8080",
+    "concurrency": 32,
+    "requests": 3000,
+    "prefixes": 16,
+    "prefix_tokens": 1000,
+    "suffix_tokens": 50,
+    "max_tokens": 64,
+    "zipf": 0,
+    "seed": 1,
+    "model": "fake"
+  },
+  "requests": 3000,
+  "errors": 108,
+  "wall_sec": 200.885046956,
+  "req_per_sec": 14.396293023409736,
+  "tokens_per_sec": 921.3627534982231,
+  "ttft_ms": {
+    "p50": 211.51,
+    "p90": 755.905,
+    "p99": 1537.015,
+    "mean": 295.3495726141077
+  },
+  "total_ms": {
+    "p50": 2139.819,
+    "p90": 2681.698,
+    "p99": 3457.583,
+    "mean": 2182.3848734439807
+  },
+  "cache_hit_rate": 0.5878284923928078,
+  "prompt_tokens": 3036600,
+  "completion_tokens": 185088,
+  "status_codes": {
+    "0": 45,
+    "200": 2955
+  },
+  "per_backend": {
+    "fakellm-0": 758,
+    "fakellm-1": 747,
+    "fakellm-2": 766,
+    "fakellm-3": 621
+  },
+  "first_errors": [
+    "Post \"http://gateway:8080/v1/chat/completions\": readfrom tcp 10.244.0.26:43458-\u003e10.96.167.49:8080: write tcp 10.244.0.26:43458-\u003e10.96.167.49:8080: write: broken pipe",
+    "Post \"http://gateway:8080/v1/chat/completions\": read tcp 10.244.0.26:43456-\u003e10.96.167.49:8080: read: connection reset by peer",
+    "unexpected EOF",
+    "unexpected EOF",
+    "unexpected EOF"
+  ]
+}
