@@ -1,0 +1,214 @@
+// Package loadgen drives a gateway or backend with concurrent streaming chat requests and
+// reports latency percentiles. Prompts share a configurable set of system prompts, so routing
+// policies that exploit prefix caches have something to exploit.
+package loadgen
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"math/rand"
+	"net/http"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/byteB8/llm-gateway/internal/openai"
+)
+
+type Config struct {
+	URL          string  `json:"url"`
+	Concurrency  int     `json:"concurrency"`
+	Requests     int     `json:"requests"`
+	Prefixes     int     `json:"prefixes"`      // distinct system prompts
+	PrefixTokens int     `json:"prefix_tokens"` // tokens per system prompt
+	SuffixTokens int     `json:"suffix_tokens"` // tokens of the user message
+	MaxTokens    int     `json:"max_tokens"`
+	Zipf         float64 `json:"zipf"` // > 1 skews prefix popularity; 0 means uniform
+	Seed         int64   `json:"seed"`
+	Model        string  `json:"model"`
+}
+
+type Result struct {
+	TTFT     time.Duration
+	Total    time.Duration
+	Tokens   int
+	Backend  string
+	CacheHit bool
+	Err      string
+}
+
+type Summary struct {
+	Config       Config         `json:"config"`
+	Requests     int            `json:"requests"`
+	Errors       int            `json:"errors"`
+	WallSec      float64        `json:"wall_sec"`
+	ReqPerSec    float64        `json:"req_per_sec"`
+	TokPerSec    float64        `json:"tokens_per_sec"`
+	TTFTms       Percentiles    `json:"ttft_ms"`
+	TotalMs      Percentiles    `json:"total_ms"`
+	CacheHitRate float64        `json:"cache_hit_rate"`
+	PerBackend   map[string]int `json:"per_backend"`
+	FirstErrors  []string       `json:"first_errors,omitempty"`
+}
+
+type Percentiles struct {
+	P50  float64 `json:"p50"`
+	P90  float64 `json:"p90"`
+	P99  float64 `json:"p99"`
+	Mean float64 `json:"mean"`
+}
+
+// Run sends cfg.Requests requests from cfg.Concurrency workers and summarises them.
+func Run(ctx context.Context, cfg Config) Summary {
+	client := &http.Client{Transport: &http.Transport{MaxIdleConnsPerHost: cfg.Concurrency + 8}}
+	prompts := makePrefixes(cfg)
+	jobs := make(chan int)
+	results := make([]Result, cfg.Requests)
+	var wg sync.WaitGroup
+	start := time.Now()
+	for w := 0; w < cfg.Concurrency; w++ {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			rng := rand.New(rand.NewSource(cfg.Seed + int64(w)))
+			var zipf *rand.Zipf
+			if cfg.Zipf > 1 && cfg.Prefixes > 1 {
+				zipf = rand.NewZipf(rng, cfg.Zipf, 1, uint64(cfg.Prefixes-1))
+			}
+			for i := range jobs {
+				p := rng.Intn(cfg.Prefixes)
+				if zipf != nil {
+					p = int(zipf.Uint64())
+				}
+				results[i] = one(ctx, client, cfg, prompts[p], randomWords(rng, cfg.SuffixTokens))
+			}
+		}(w)
+	}
+	for i := 0; i < cfg.Requests && ctx.Err() == nil; i++ {
+		jobs <- i
+	}
+	close(jobs)
+	wg.Wait()
+	return summarise(cfg, results, time.Since(start))
+}
+
+func one(ctx context.Context, client *http.Client, cfg Config, system, user string) Result {
+	body, _ := json.Marshal(openai.ChatRequest{
+		Model:     cfg.Model,
+		Messages:  []openai.Message{{Role: "system", Content: system}, {Role: "user", Content: user}},
+		Stream:    true,
+		MaxTokens: cfg.MaxTokens,
+	})
+	start := time.Now()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.URL+"/v1/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return Result{Err: err.Error()}
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return Result{Err: err.Error()}
+	}
+	defer resp.Body.Close()
+	res := Result{Backend: resp.Header.Get("X-Gateway-Backend"), CacheHit: resp.Header.Get("X-Prefix-Cache") == "hit"}
+	if res.Backend == "" {
+		res.Backend = resp.Header.Get("X-Backend")
+	}
+	if resp.StatusCode != http.StatusOK {
+		res.Err = fmt.Sprintf("status %d", resp.StatusCode)
+		return res
+	}
+	sc := bufio.NewScanner(resp.Body)
+	sc.Buffer(make([]byte, 64<<10), 1<<20)
+	for sc.Scan() {
+		data, ok := strings.CutPrefix(sc.Text(), "data: ")
+		if !ok || data == "[DONE]" {
+			continue
+		}
+		var c openai.Chunk
+		if json.Unmarshal([]byte(data), &c) != nil || len(c.Choices) == 0 || c.Choices[0].Delta.Content == "" {
+			continue
+		}
+		if res.Tokens == 0 {
+			res.TTFT = time.Since(start)
+		}
+		res.Tokens++
+	}
+	res.Total = time.Since(start)
+	if err := sc.Err(); err != nil {
+		res.Err = err.Error()
+	} else if res.Tokens == 0 {
+		res.Err = "no tokens"
+	}
+	return res
+}
+
+func summarise(cfg Config, rs []Result, wall time.Duration) Summary {
+	s := Summary{Config: cfg, Requests: len(rs), WallSec: wall.Seconds(), PerBackend: map[string]int{}}
+	var ttft, total []float64
+	var tokens, hits int
+	for _, r := range rs {
+		if r.Err != "" {
+			s.Errors++
+			if len(s.FirstErrors) < 5 {
+				s.FirstErrors = append(s.FirstErrors, r.Err)
+			}
+			continue
+		}
+		ttft = append(ttft, ms(r.TTFT))
+		total = append(total, ms(r.Total))
+		tokens += r.Tokens
+		if r.CacheHit {
+			hits++
+		}
+		s.PerBackend[r.Backend]++
+	}
+	ok := len(ttft)
+	if ok > 0 {
+		s.CacheHitRate = float64(hits) / float64(ok)
+	}
+	s.ReqPerSec = float64(ok) / wall.Seconds()
+	s.TokPerSec = float64(tokens) / wall.Seconds()
+	s.TTFTms, s.TotalMs = percentiles(ttft), percentiles(total)
+	return s
+}
+
+func percentiles(xs []float64) Percentiles {
+	if len(xs) == 0 {
+		return Percentiles{}
+	}
+	sort.Float64s(xs)
+	at := func(q float64) float64 { return xs[int(q*float64(len(xs)-1)+0.5)] }
+	var sum float64
+	for _, x := range xs {
+		sum += x
+	}
+	return Percentiles{P50: at(0.50), P90: at(0.90), P99: at(0.99), Mean: sum / float64(len(xs))}
+}
+
+// makePrefixes builds the shared system prompts. Each starts with its own index so prompts of
+// equal length still hash differently.
+func makePrefixes(cfg Config) []string {
+	rng := rand.New(rand.NewSource(cfg.Seed ^ 0x5eed))
+	out := make([]string, max(cfg.Prefixes, 1))
+	for i := range out {
+		out[i] = fmt.Sprintf("system-%d %s", i, randomWords(rng, max(cfg.PrefixTokens-1, 0)))
+	}
+	return out
+}
+
+var vocab = strings.Fields("data model token cache batch query answer filing revenue report latency stream agent tool plan step")
+
+func randomWords(rng *rand.Rand, n int) string {
+	w := make([]string, n)
+	for i := range w {
+		w[i] = vocab[rng.Intn(len(vocab))]
+	}
+	return strings.Join(w, " ")
+}
+
+func ms(d time.Duration) float64 { return float64(d.Microseconds()) / 1000 }
