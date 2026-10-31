@@ -8,6 +8,7 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"strings"
@@ -42,6 +43,7 @@ func main() {
 	otlp := flag.String("otlp-endpoint", os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"), "OTLP/HTTP collector URL for traces (empty = tracing off)")
 	sample := flag.Float64("trace-sample", 1.0, "share of new traces to sample")
 	admin := flag.String("admin-listen", ":8081", "admin address for GET /metrics and GET /drain (the preStop hook); keep it off the public Service")
+	profiling := flag.Bool("pprof", false, "serve Go's profiler at /debug/pprof/ on the admin address")
 	notice := flag.Duration("drain-notice", 5*time.Second, "how long GET /drain keeps serving with Connection: close before returning")
 	flag.Parse()
 
@@ -127,6 +129,10 @@ func main() {
 		time.Sleep(*notice)
 		w.Write([]byte("draining\n"))
 	})
+	if *profiling {
+		adminMux.HandleFunc("GET /debug/pprof/", pprof.Index)
+		adminMux.HandleFunc("GET /debug/pprof/profile", pprof.Profile)
+	}
 	go func() {
 		if err := http.ListenAndServe(*admin, adminMux); err != nil {
 			log.Fatal(err)
