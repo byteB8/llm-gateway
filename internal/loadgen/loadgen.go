@@ -147,9 +147,14 @@ func one(ctx context.Context, client *http.Client, cfg Config, system, user stri
 	}
 	sc := bufio.NewScanner(resp.Body)
 	sc.Buffer(make([]byte, 64<<10), 1<<20)
+	done := false
 	for sc.Scan() {
 		data, ok := strings.CutPrefix(sc.Text(), "data: ")
-		if !ok || data == "[DONE]" {
+		if !ok {
+			continue
+		}
+		if data == "[DONE]" {
+			done = true
 			continue
 		}
 		var c openai.Chunk
@@ -162,10 +167,13 @@ func one(ctx context.Context, client *http.Client, cfg Config, system, user stri
 		res.Tokens++
 	}
 	res.Total = time.Since(start)
-	if err := sc.Err(); err != nil {
+	switch err := sc.Err(); {
+	case err != nil:
 		res.Err = err.Error()
-	} else if res.Tokens == 0 {
+	case res.Tokens == 0:
 		res.Err = "no tokens"
+	case !done:
+		res.Err = "stream ended without [DONE]" // cut short behind a cleanly closed response
 	}
 	return res
 }

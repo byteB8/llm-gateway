@@ -2,6 +2,7 @@ package loadgen
 
 import (
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -33,5 +34,18 @@ func TestPercentiles(t *testing.T) {
 	p := percentiles([]float64{5, 1, 4, 2, 3})
 	if p.P50 != 3 || p.P99 != 5 || p.Mean != 3 {
 		t.Fatalf("%+v", p)
+	}
+}
+
+func TestStreamWithoutDoneIsAnError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"a\"}}]}\n\n")) // and no [DONE]
+	}))
+	defer srv.Close()
+	s, _ := Run(context.Background(), Config{URL: srv.URL, Concurrency: 1, Requests: 1, Prefixes: 1, PrefixTokens: 2,
+		SuffixTokens: 1, MaxTokens: 1})
+	if s.Errors != 1 {
+		t.Fatalf("a stream without [DONE] counted as a success: %+v", s)
 	}
 }
