@@ -3,3 +3,5 @@
 *.out
 .remote
 /results/raw/
+.backend_key
+bench/sustain/logs/

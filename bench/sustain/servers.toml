@@ -1,0 +1,17 @@
+# Two vLLM servers, one per A4000. The API key comes from VLLM_API_KEY (set by serve.sh from .backend_key).
+model = "Qwen/Qwen3-1.7B"
+args = [
+  "--served-model-name", "qwen3-1.7b",
+  "--max-model-len", "4096",
+  "--max-num-seqs", "16",               # the gateway's -capacity
+  "--gpu-memory-utilization", "0.85",
+  "--enable-prefix-caching",
+]
+
+[servers.gpu0]
+gpu = 0
+port = 8100
+
+[servers.gpu1]
+gpu = 1
+port = 8101
