@@ -137,3 +137,16 @@ func TestMetricsBackendDyingMidStream(t *testing.T) {
 		t.Fatalf("interrupted{client} = %v", v)
 	}
 }
+
+func TestKnownSeriesStartAtZero(t *testing.T) {
+	_, m, _ := metered(t, Config{}, fakeHandler(), fakeHandler())
+	if n := testutil.CollectAndCount(m.BackendFailures); n != 4 { // 2 backends x {connect, status_5xx}
+		t.Fatalf("%d backend-failure series before any request, want 4", n)
+	}
+	if n := testutil.CollectAndCount(m.Interrupted); n != 4 { // 2 backends x {client, backend}
+		t.Fatalf("%d interrupted series, want 4", n)
+	}
+	if n := testutil.CollectAndCount(m.RateLimited); n != 4 { // "anonymous" x 4 reasons
+		t.Fatalf("%d rate-limited series, want 4", n)
+	}
+}

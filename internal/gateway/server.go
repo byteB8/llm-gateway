@@ -94,6 +94,29 @@ func New(cfg Config, backends []*router.Backend, policy router.Policy, log *slog
 				prometheus.Labels{"result": result}, func() float64 { return float64(f(k.Stats())) })
 		}
 	}
+	// Series whose labels are known in advance start at 0, so dashboards and alert rules see "none
+	// so far" rather than no data until the first failure.
+	tenants := []string{"anonymous"}
+	if cfg.Tenants != nil {
+		tenants = tenants[:0]
+		for _, t := range cfg.Tenants.list {
+			tenants = append(tenants, t.Name)
+		}
+	}
+	for _, t := range tenants {
+		for _, reason := range []string{"rpm", "tpm", "concurrency", "too_large"} {
+			cfg.Metrics.RateLimited.WithLabelValues(t, reason)
+		}
+		cfg.Metrics.Requests.WithLabelValues(t, "none", "502")
+	}
+	for _, b := range backends {
+		for _, side := range []string{"client", "backend"} {
+			cfg.Metrics.Interrupted.WithLabelValues(b.Name, side)
+		}
+		for _, reason := range []string{"connect", "status_5xx"} {
+			cfg.Metrics.BackendFailures.WithLabelValues(b.Name, reason)
+		}
+	}
 	limiter := limit.New(nil)
 	if cfg.Tenants != nil {
 		for _, t := range cfg.Tenants.list {
