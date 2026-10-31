@@ -148,3 +148,27 @@ func TestRejectsBadBody(t *testing.T) {
 		t.Fatalf("status %d", resp.StatusCode)
 	}
 }
+
+func TestDrainingClosesConnections(t *testing.T) {
+	_, be := fake("one")
+	defer be.Close()
+	bs, _ := router.ParseBackends("a=" + be.URL)
+	p, _ := router.New("round-robin", bs, 1.25)
+	g := New(Config{}, bs, p, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	gw := httptest.NewServer(g.Handler())
+	defer gw.Close()
+
+	resp := chat(t, gw.URL, false)
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.Close {
+		t.Fatal("connection closed before draining")
+	}
+	g.StartDraining()
+	resp = chat(t, gw.URL, false)
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if !resp.Close || resp.StatusCode != 200 {
+		t.Fatalf("draining response: status %d, Close=%v", resp.StatusCode, resp.Close)
+	}
+}

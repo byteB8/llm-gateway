@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/byteB8/llm-gateway/internal/limit"
@@ -36,6 +37,7 @@ type Server struct {
 	client   *http.Client
 	limiter  *limit.Limiter
 	log      *slog.Logger
+	draining atomic.Bool
 }
 
 func New(cfg Config, backends []*router.Backend, policy router.Policy, log *slog.Logger) *Server {
@@ -67,7 +69,22 @@ func New(cfg Config, backends []*router.Backend, policy router.Policy, log *slog
 	return &Server{cfg: cfg, backends: backends, policy: policy, client: &http.Client{Transport: transport}, limiter: limiter, log: log}
 }
 
+// StartDraining makes every later response carry "Connection: close". Clients then open their next
+// request on a new connection, which the Service sends to another pod, so by the time the listener
+// closes no client is about to reuse a connection to this one. Call it before shutting down.
+func (s *Server) StartDraining() { s.draining.Store(true) }
+
 func (s *Server) Handler() http.Handler {
+	mux := s.routes()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.draining.Load() {
+			w.Header().Set("Connection", "close")
+		}
+		mux.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/chat/completions", s.chat)
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok\n")) })
