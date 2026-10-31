@@ -35,9 +35,18 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	defer stop()
 
-	store, err := meter.Open(ctx, dsn)
-	if err != nil {
-		log.Fatal(err)
+	var store *meter.Store
+	for backoff := time.Second; ; backoff = min(backoff*2, 30*time.Second) {
+		s, err := meter.Open(ctx, dsn)
+		if err == nil {
+			store = s
+			break
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		logger.Warn("database not ready; retrying", "err", err, "backoff", backoff.String())
+		time.Sleep(backoff)
 	}
 	defer store.Close()
 	cl, err := kgo.NewClient(

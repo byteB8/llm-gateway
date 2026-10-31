@@ -57,16 +57,26 @@ func main() {
 	var pub usage.Publisher = usage.Nop{}
 	if *brokers != "" {
 		bl := strings.Split(*brokers, ",")
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		if err := usage.EnsureTopic(ctx, bl, *topic, int32(*partitions)); err != nil {
-			log.Fatalf("usage topic: %v", err)
-		}
-		cancel()
-		k, err := usage.NewKafka(bl, *topic, *buffered)
+		k, err := usage.NewKafka(bl, *topic, *buffered) // connects lazily; never blocks startup
 		if err != nil {
 			log.Fatal(err)
 		}
 		pub = k
+		// Metering must not decide whether we serve: create the topic in the background and keep
+		// trying until Kafka is reachable. Events produced before that are counted as failed.
+		go func() {
+			for backoff := time.Second; ; backoff = min(backoff*2, 30*time.Second) {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				err := usage.EnsureTopic(ctx, bl, *topic, int32(*partitions))
+				cancel()
+				if err == nil {
+					logger.Info("usage topic ready", "topic", *topic)
+					return
+				}
+				logger.Warn("usage topic not ready; retrying", "err", err, "backoff", backoff.String())
+				time.Sleep(backoff)
+			}
+		}()
 	}
 
 	g := gateway.New(gateway.Config{
